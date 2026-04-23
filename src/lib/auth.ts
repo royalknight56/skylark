@@ -5,7 +5,7 @@
  * @author skylark
  */
 
-import type { User } from './types';
+import type { User, OrgMemberRole } from './types';
 import { cookies } from 'next/headers';
 
 /** cookie 名 */
@@ -44,6 +44,35 @@ export function generateUserId(email: string): string {
     hash |= 0;
   }
   return `user-${Math.abs(hash).toString(36)}`;
+}
+
+/**
+ * 获取用户在某企业中的角色
+ * 未加入返回 null
+ */
+export async function getOrgRole(
+  db: D1Database,
+  orgId: string,
+  userId: string
+): Promise<OrgMemberRole | null> {
+  const row = await db
+    .prepare('SELECT role FROM org_members WHERE org_id = ? AND user_id = ?')
+    .bind(orgId, userId)
+    .first<{ role: OrgMemberRole }>();
+  return row?.role ?? null;
+}
+
+/**
+ * 校验 owner 权限，非 owner 返回 null
+ */
+export async function requireOwner(
+  db: D1Database,
+  orgId: string,
+  userId: string
+): Promise<OrgMemberRole | null> {
+  const role = await getOrgRole(db, orgId, userId);
+  if (role !== 'owner') return null;
+  return role;
 }
 
 /** 确保用户存在于数据库中（upsert） */

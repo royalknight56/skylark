@@ -14,6 +14,7 @@ export interface Organization {
   description: string | null;
   invite_code: string | null;
   owner_id: string;
+  require_approval: boolean;
   created_at: string;
   /** 前端展示用 */
   member_count?: number;
@@ -176,6 +177,61 @@ export interface WSMessage {
   type: WSMessageType;
   payload: Record<string, unknown>;
   timestamp: string;
+}
+
+/* ==================== 部门相关 ==================== */
+
+export interface Department {
+  id: string;
+  org_id: string;
+  name: string;
+  parent_id: string | null;
+  created_at: string;
+  /** 前端展示用 */
+  member_count?: number;
+}
+
+/* ==================== 加入申请相关 ==================== */
+
+export type JoinRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface JoinRequest {
+  id: string;
+  org_id: string;
+  user_id: string;
+  message: string | null;
+  status: JoinRequestStatus;
+  reviewed_by: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  /** 前端展示用 */
+  user?: User;
+  reviewer?: User;
+}
+
+/* ==================== 操作日志相关 ==================== */
+
+export interface AdminLog {
+  id: string;
+  org_id: string;
+  operator_id: string;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  detail: string | null;
+  created_at: string;
+  /** 前端展示用 */
+  operator?: User;
+}
+
+/* ==================== 管理后台统计 ==================== */
+
+export interface OrgStats {
+  total_members: number;
+  new_members_this_week: number;
+  total_messages: number;
+  total_documents: number;
+  pending_requests: number;
 }
 
 /* ==================== API 响应 ==================== */

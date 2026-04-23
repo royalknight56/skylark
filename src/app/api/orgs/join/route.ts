@@ -4,7 +4,7 @@
  */
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { getOrgByInviteCode, joinOrganization, isOrgMember } from "@/lib/db/queries";
+import { getOrgByInviteCode, joinOrganization, isOrgMember, hasPendingJoinRequest, createJoinRequest } from "@/lib/db/queries";
 import { getRequestUserId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -32,6 +32,22 @@ export async function POST(request: NextRequest) {
     const already = await isOrgMember(env.DB, org.id, userId);
     if (already) {
       return NextResponse.json({ success: false, error: "你已经是该企业的成员" }, { status: 409 });
+    }
+
+    // 如果企业开启了审批模式，创建加入申请而非直接加入
+    if (org.require_approval) {
+      const pending = await hasPendingJoinRequest(env.DB, org.id, userId);
+      if (pending) {
+        return NextResponse.json({ success: false, error: "你已提交过加入申请，请等待审批" }, { status: 409 });
+      }
+
+      await createJoinRequest(env.DB, {
+        id: `jr-${Date.now().toString(36)}`,
+        org_id: org.id,
+        user_id: userId,
+        message: (body as { invite_code: string; message?: string }).message,
+      });
+      return NextResponse.json({ success: true, data: org, pending_approval: true });
     }
 
     await joinOrganization(env.DB, org.id, userId);

@@ -5,10 +5,11 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Users, Loader2 } from "lucide-react";
 import ContactList from "@/components/contacts/ContactList";
 import ContactCard from "@/components/contacts/ContactCard";
+import AddContactModal from "@/components/contacts/AddContactModal";
 import { useOrg } from "@/lib/org-context";
 import type { User, Contact } from "@/lib/types";
 
@@ -22,8 +23,10 @@ export default function ContactsPage() {
   const [selectedContact, setSelectedContact] = useState<User | null>(null);
   const [groups, setGroups] = useState<{ name: string; contacts: User[] }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
 
-  useEffect(() => {
+  /** 拉取联系人列表 */
+  const fetchContacts = useCallback(() => {
     if (!currentOrg) { setLoading(false); return; }
     setLoading(true);
     setSelectedContact(null);
@@ -32,7 +35,6 @@ export default function ContactsPage() {
       .then((res) => res.json() as Promise<{ success: boolean; data?: ContactRow[] }>)
       .then((json) => {
         if (json.success && json.data) {
-          /** 按 group_name 分组 */
           const groupMap = new Map<string, User[]>();
           for (const row of json.data) {
             const groupName = row.group_name || "我的联系人";
@@ -44,7 +46,9 @@ export default function ContactsPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [currentOrg?.id, currentOrg]);
+  }, [currentOrg]);
+
+  useEffect(() => { fetchContacts(); }, [fetchContacts]);
 
   if (loading) {
     return (
@@ -60,6 +64,7 @@ export default function ContactsPage() {
         groups={groups}
         onSelectContact={setSelectedContact}
         selectedId={selectedContact?.id}
+        onClickAdd={() => setShowAddModal(true)}
       />
       {selectedContact ? (
         <ContactCard user={selectedContact} />
@@ -71,6 +76,12 @@ export default function ContactsPage() {
           <p className="text-text-secondary text-sm">选择联系人查看详情</p>
         </div>
       )}
+
+      <AddContactModal
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdded={fetchContacts}
+      />
     </>
   );
 }

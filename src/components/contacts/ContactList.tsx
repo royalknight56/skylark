@@ -20,9 +20,11 @@ interface ContactListProps {
   groups: ContactGroup[];
   onSelectContact: (user: User) => void;
   selectedId?: string;
+  /** 点击添加联系人按钮 */
+  onClickAdd?: () => void;
 }
 
-export default function ContactList({ groups, onSelectContact, selectedId }: ContactListProps) {
+export default function ContactList({ groups, onSelectContact, selectedId, onClickAdd }: ContactListProps) {
   const [searchText, setSearchText] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
@@ -62,6 +64,7 @@ export default function ContactList({ groups, onSelectContact, selectedId }: Con
       <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 border-b border-panel-border">
         <h2 className="text-base font-semibold text-text-primary">通讯录</h2>
         <button
+          onClick={onClickAdd}
           className="w-7 h-7 rounded-md flex items-center justify-center text-text-secondary
             hover:bg-list-hover transition-colors"
           title="添加联系人"

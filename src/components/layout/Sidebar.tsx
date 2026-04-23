@@ -21,6 +21,7 @@ import {
   Plus,
   Check,
   Loader2,
+  Shield,
 } from "lucide-react";
 import { useOrg } from "@/lib/org-context";
 import { useAuth } from "@/lib/auth-context";
@@ -208,6 +209,26 @@ export default function Sidebar() {
 
       {/* 底部设置 */}
       <div className="flex flex-col items-center gap-2">
+        {/* 管理后台入口 - 仅 owner 可见 */}
+        {currentOrg && user && currentOrg.owner_id === user.id && (
+          <Link
+            href="/admin"
+            className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative group
+              ${pathname.startsWith("/admin")
+                ? "bg-sidebar-active text-sidebar-text-active"
+                : "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active"
+              }`}
+            title="管理后台"
+          >
+            <Shield size={20} />
+            <span
+              className="absolute left-14 px-2 py-1 bg-gray-800 text-white text-xs rounded
+                opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50"
+            >
+              管理后台
+            </span>
+          </Link>
+        )}
         <button
           onClick={logout}
           className="w-10 h-10 rounded-lg flex items-center justify-center text-sidebar-text

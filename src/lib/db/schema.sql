@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS organizations (
   description TEXT,
   invite_code TEXT UNIQUE,
   owner_id TEXT NOT NULL,
+  require_approval BOOLEAN DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -41,6 +42,50 @@ CREATE TABLE IF NOT EXISTS org_invites (
 );
 
 CREATE INDEX IF NOT EXISTS idx_org_invites_email ON org_invites(invitee_email, status);
+
+-- 部门表
+CREATE TABLE IF NOT EXISTS departments (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  parent_id TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (parent_id) REFERENCES departments(id) ON DELETE SET NULL
+);
+
+-- 加入申请表
+CREATE TABLE IF NOT EXISTS join_requests (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  message TEXT,
+  status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
+  reviewed_by TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  reviewed_at DATETIME,
+  FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (reviewed_by) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_join_requests_org_status ON join_requests(org_id, status);
+
+-- 操作日志表
+CREATE TABLE IF NOT EXISTS admin_logs (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  operator_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target_type TEXT,
+  target_id TEXT,
+  detail TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (operator_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_logs_org_time ON admin_logs(org_id, created_at DESC);
 
 -- ==================== 用户 ====================
 
