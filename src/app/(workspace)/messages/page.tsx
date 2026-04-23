@@ -17,7 +17,7 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!currentOrg) return;
+    if (!currentOrg) { setLoading(false); return; }
     setLoading(true);
     fetch(`/api/conversations?org_id=${currentOrg.id}`)
       .then((res) => res.json() as Promise<{ success: boolean; data?: Conversation[] }>)

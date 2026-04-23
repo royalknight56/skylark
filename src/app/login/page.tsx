@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, UserPlus, Mail, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
@@ -20,10 +20,13 @@ export default function LoginPage() {
   const [error, setError] = useState("");
 
   /** 已登录则跳转 */
-  if (!authLoading && user) {
-    router.replace("/messages");
-    return null;
-  }
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace("/messages");
+    }
+  }, [authLoading, user, router]);
+
+  if (!authLoading && user) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

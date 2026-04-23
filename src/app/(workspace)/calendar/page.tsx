@@ -19,7 +19,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!currentOrg) return;
+    if (!currentOrg) { setLoading(false); return; }
     setLoading(true);
     setSelectedEvent(null);
 

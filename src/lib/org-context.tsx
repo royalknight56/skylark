@@ -14,6 +14,7 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import type { Organization } from "./types";
 
 interface OrgContextValue {
@@ -37,6 +38,8 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [currentOrg, setCurrentOrg] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
 
   /** 从 API 拉取企业列表 */
   const refreshOrgs = useCallback(async () => {
@@ -60,6 +63,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refreshOrgs();
   }, [refreshOrgs]);
+
+  /** 无企业时跳转到创建/加入企业页面 */
+  useEffect(() => {
+    if (loading) return;
+    if (orgs.length === 0 && !pathname.startsWith("/org")) {
+      router.replace("/org");
+    }
+  }, [loading, orgs.length, pathname, router]);
 
   /** 切换企业 */
   const switchOrg = useCallback(async (org: Organization) => {

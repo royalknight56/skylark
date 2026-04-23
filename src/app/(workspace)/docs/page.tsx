@@ -20,7 +20,7 @@ export default function DocsPage() {
 
   /** 从 API 获取文档列表 */
   useEffect(() => {
-    if (!currentOrg) return;
+    if (!currentOrg) { setLoading(false); return; }
     setLoading(true);
     setSelectedDoc(null);
 

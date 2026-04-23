@@ -46,7 +46,7 @@ export default function OrgSettingsPage() {
 
   /** 从 API 拉取成员列表 */
   useEffect(() => {
-    if (!currentOrg) return;
+    if (!currentOrg) { setLoading(false); return; }
     setLoading(true);
     fetch(`/api/orgs/${currentOrg.id}/members`)
       .then((res) => res.json() as Promise<{ success: boolean; data?: (OrgMember & { user: User })[] }>)
