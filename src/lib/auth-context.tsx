@@ -1,0 +1,116 @@
+/**
+ * 认证上下文 - 全局管理当前登录用户
+ * 应用启动时调用 /api/auth/me 检查登录态
+ * 未登录则重定向到 /login
+ * @author skylark
+ */
+
+"use client";
+
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  type ReactNode,
+} from "react";
+import { useRouter, usePathname } from "next/navigation";
+import type { User } from "./types";
+
+interface AuthContextValue {
+  /** 当前登录用户（未登录或加载中为 null） */
+  user: User | null;
+  /** 是否正在检查登录态 */
+  loading: boolean;
+  /** 注册并登录 */
+  register: (name: string, email: string) => Promise<boolean>;
+  /** 登出 */
+  logout: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+/** 不需要登录的路径前缀 */
+const PUBLIC_PATHS = ["/login"];
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
+
+  /** 检查登录态 */
+  const checkAuth = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      if (res.ok) {
+        const json = (await res.json()) as { success: boolean; data?: User };
+        if (json.success && json.data) {
+          setUser(json.data);
+          return;
+        }
+      }
+      setUser(null);
+    } catch {
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  /** 未登录时重定向到 /login */
+  useEffect(() => {
+    if (loading) return;
+    const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+    if (!user && !isPublic) {
+      router.replace("/login");
+    }
+  }, [user, loading, pathname, router]);
+
+  /** 注册 */
+  const register = useCallback(async (name: string, email: string): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email }),
+      });
+      const json = (await res.json()) as { success: boolean; data?: User };
+      if (json.success && json.data) {
+        setUser(json.data);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  /** 登出 */
+  const logout = useCallback(async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // 忽略
+    }
+    setUser(null);
+    router.replace("/login");
+  }, [router]);
+
+  return (
+    <AuthContext.Provider value={{ user, loading, register, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  return ctx;
+}
