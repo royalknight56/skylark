@@ -1,26 +1,101 @@
 @import "tailwindcss";
 
+/* Skylark 全局主题变量 */
 :root {
-	--background: #ffffff;
-	--foreground: #171717;
+  --color-primary: #3370FF;
+  --color-primary-hover: #2860E0;
+  --color-primary-light: #E8F0FE;
+  --color-sidebar-bg: #1B1F26;
+  --color-sidebar-hover: #2B2F38;
+  --color-sidebar-active: #3370FF;
+  --color-sidebar-text: #8F959E;
+  --color-sidebar-text-active: #FFFFFF;
+  --color-panel-bg: #FFFFFF;
+  --color-panel-border: #E8E8E8;
+  --color-list-hover: #F5F6F7;
+  --color-list-active: #E8F0FE;
+  --color-text-primary: #1F2329;
+  --color-text-secondary: #646A73;
+  --color-text-placeholder: #8F959E;
+  --color-bg-page: #F5F6F7;
+  --color-bg-bubble-self: #CCE0FF;
+  --color-bg-bubble-other: #FFFFFF;
+  --color-success: #34C759;
+  --color-warning: #F5A623;
+  --color-danger: #F54A45;
 }
 
 @theme inline {
-	--color-background: var(--background);
-	--color-foreground: var(--foreground);
-	--font-sans: var(--font-geist-sans);
-	--font-mono: var(--font-geist-mono);
+  --color-primary: var(--color-primary);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-primary-light: var(--color-primary-light);
+  --color-sidebar-bg: var(--color-sidebar-bg);
+  --color-sidebar-hover: var(--color-sidebar-hover);
+  --color-sidebar-active: var(--color-sidebar-active);
+  --color-sidebar-text: var(--color-sidebar-text);
+  --color-sidebar-text-active: var(--color-sidebar-text-active);
+  --color-panel-bg: var(--color-panel-bg);
+  --color-panel-border: var(--color-panel-border);
+  --color-list-hover: var(--color-list-hover);
+  --color-list-active: var(--color-list-active);
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-placeholder: var(--color-text-placeholder);
+  --color-bg-page: var(--color-bg-page);
+  --color-bg-bubble-self: var(--color-bg-bubble-self);
+  --color-bg-bubble-other: var(--color-bg-bubble-other);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-danger: var(--color-danger);
 }
 
-@media (prefers-color-scheme: dark) {
-	:root {
-		--background: #0a0a0a;
-		--foreground: #ededed;
-	}
+* {
+  box-sizing: border-box;
 }
 
 body {
-	background: var(--background);
-	color: var(--foreground);
-	font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  background: var(--color-bg-page);
+  overflow: hidden;
 }
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C1C7CD;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #8F959E;
+}
+
+/* 头像占位色彩 */
+.avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #FFFFFF;
+  flex-shrink: 0;
+}
+
+.avatar-blue { background: #3370FF; }
+.avatar-green { background: #34C759; }
+.avatar-orange { background: #F5A623; }
+.avatar-purple { background: #8B5CF6; }
+.avatar-red { background: #F54A45; }
+.avatar-cyan { background: #06B6D4; }

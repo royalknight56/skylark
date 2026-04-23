@@ -35,23 +35,42 @@
 	"observability": {
 		"enabled": true
 	},
-	"upload_source_maps": true
-	/**
-	 * Smart Placement
-	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
-	 */
-	// "placement": {  "mode": "smart" }
-	/**
-	 * Bindings
-	 * Bindings allow your Worker to interact with resources on the Cloudflare Developer Platform, including
-	 * databases, object storage, AI inference, real-time communication and more.
-	 * https://developers.cloudflare.com/workers/runtime-apis/bindings/
-	 */
-	/**
-	 * Environment Variables
-	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
-	 * Note: Use secrets to store sensitive data.
-	 * https://developers.cloudflare.com/workers/configuration/secrets/
-	 */
-	// "vars": {  "MY_VARIABLE": "production_value" }
+	"upload_source_maps": true,
+	// D1 数据库 - 存储用户、会话、消息等关系数据
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "skylark-db",
+			"database_id": "local"
+		}
+	],
+	// R2 对象存储 - 存储头像、聊天附件、文档文件
+	"r2_buckets": [
+		{
+			"binding": "R2",
+			"bucket_name": "skylark-files"
+		}
+	],
+	// KV 缓存 - 在线状态、未读计数
+	"kv_namespaces": [
+		{
+			"binding": "KV",
+			"id": "local"
+		}
+	],
+	// Durable Objects - 实时聊天室 WebSocket
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "CHAT_ROOM",
+				"class_name": "ChatRoom"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["ChatRoom"]
+		}
+	]
 }
