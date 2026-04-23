@@ -39,7 +39,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { currentOrg, orgs, loading, switchOrg } = useOrg();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [showOrgMenu, setShowOrgMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -170,15 +170,6 @@ export default function Sidebar() {
         )}
       </div>
 
-      {/* 搜索 */}
-      <button
-        className="w-10 h-10 rounded-lg flex items-center justify-center text-sidebar-text
-          hover:bg-sidebar-hover hover:text-sidebar-text-active transition-colors mb-2 mt-2"
-        title="搜索"
-      >
-        <Search size={20} />
-      </button>
-
       {/* 主导航 */}
       <nav className="flex-1 flex flex-col items-center gap-1">
         {navItems.map((item) => {
@@ -229,14 +220,23 @@ export default function Sidebar() {
             </span>
           </Link>
         )}
-        <button
-          onClick={logout}
-          className="w-10 h-10 rounded-lg flex items-center justify-center text-sidebar-text
-            hover:bg-sidebar-hover hover:text-sidebar-text-active transition-colors"
-          title="退出登录"
+        <Link
+          href="/settings"
+          className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative group
+            ${pathname.startsWith("/settings")
+              ? "bg-sidebar-active text-sidebar-text-active"
+              : "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active"
+            }`}
+          title="设置"
         >
           <Settings size={20} />
-        </button>
+          <span
+            className="absolute left-14 px-2 py-1 bg-gray-800 text-white text-xs rounded
+              opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50"
+          >
+            设置
+          </span>
+        </Link>
         <div className="w-8 h-8 rounded-full avatar-placeholder avatar-blue text-xs cursor-pointer" title={user?.name}>
           {user?.name?.charAt(0) || "?"}
         </div>

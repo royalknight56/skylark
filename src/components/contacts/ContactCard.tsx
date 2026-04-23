@@ -5,10 +5,12 @@
 
 "use client";
 
-import { MessageSquare, Phone, Video, Mail, MoreHorizontal } from "lucide-react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { MessageSquare, Phone, Video, Mail, MoreHorizontal, Loader2 } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
+import { useOrg } from "@/lib/org-context";
 import type { User } from "@/lib/types";
-import Link from "next/link";
 
 interface ContactCardProps {
   user: User;
@@ -29,6 +31,29 @@ const statusColor: Record<string, string> = {
 };
 
 export default function ContactCard({ user }: ContactCardProps) {
+  const router = useRouter();
+  const { currentOrg } = useOrg();
+  const [sending, setSending] = useState(false);
+
+  /** 查找或创建私聊会话并跳转 */
+  const handleSendMessage = async () => {
+    if (!currentOrg || sending) return;
+    setSending(true);
+    try {
+      const res = await fetch("/api/conversations/direct", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ org_id: currentOrg.id, target_user_id: user.id }),
+      });
+      const json = (await res.json()) as { success: boolean; data?: { id: string } };
+      if (json.success && json.data) {
+        router.push(`/messages/${json.data.id}`);
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex items-start justify-center bg-bg-page p-8">
       <div className="w-full max-w-md bg-panel-bg rounded-xl shadow-sm overflow-hidden">
@@ -58,14 +83,15 @@ export default function ContactCard({ user }: ContactCardProps) {
 
           {/* 操作按钮 */}
           <div className="mt-6 flex items-center gap-3">
-            <Link
-              href="/messages"
+            <button
+              onClick={handleSendMessage}
+              disabled={sending}
               className="flex-1 h-9 rounded-lg bg-primary text-white text-sm font-medium
-                flex items-center justify-center gap-2 hover:bg-primary-hover transition-colors"
+                flex items-center justify-center gap-2 hover:bg-primary-hover transition-colors disabled:opacity-70"
             >
-              <MessageSquare size={16} />
+              {sending ? <Loader2 size={16} className="animate-spin" /> : <MessageSquare size={16} />}
               发消息
-            </Link>
+            </button>
             <button
               className="w-9 h-9 rounded-lg border border-panel-border flex items-center justify-center
                 text-text-secondary hover:bg-list-hover transition-colors"

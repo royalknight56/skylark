@@ -178,6 +178,29 @@ export async function isOrgMember(
 
 /* ==================== 会话查询 ==================== */
 
+/**
+ * 查找两个用户之间已有的私聊会话
+ * 返回会话 ID，不存在则返回 null
+ */
+export async function findDirectConversation(
+  db: D1Database,
+  orgId: string,
+  userIdA: string,
+  userIdB: string
+): Promise<string | null> {
+  const row = await db
+    .prepare(
+      `SELECT c.id FROM conversations c
+       JOIN conversation_members cm1 ON c.id = cm1.conversation_id AND cm1.user_id = ?
+       JOIN conversation_members cm2 ON c.id = cm2.conversation_id AND cm2.user_id = ?
+       WHERE c.org_id = ? AND c.type = 'direct'
+       LIMIT 1`
+    )
+    .bind(userIdA, userIdB, orgId)
+    .first<{ id: string }>();
+  return row?.id ?? null;
+}
+
 /** 获取用户在某企业下的所有会话 */
 export async function getUserConversations(
   db: D1Database,
