@@ -14,7 +14,6 @@ import {
   Users,
   Calendar,
   FileText,
-  Search,
   Settings,
   LayoutGrid,
   ChevronDown,

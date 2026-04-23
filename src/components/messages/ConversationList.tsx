@@ -42,7 +42,7 @@ export default function ConversationList({ conversations }: ConversationListProp
 
   const filtered = conversations.filter((c) => {
     if (!searchText) return true;
-    const name = c.name || "私聊";
+    const name = c.name || "未命名会话";
     return name.toLowerCase().includes(searchText.toLowerCase());
   });
 
@@ -79,7 +79,7 @@ export default function ConversationList({ conversations }: ConversationListProp
       <div className="flex-1 overflow-y-auto">
         {filtered.map((conv) => {
           const isActive = pathname === `/messages/${conv.id}`;
-          const displayName = conv.name || "私聊";
+          const displayName = conv.name || "未命名会话";
 
           return (
             <Link

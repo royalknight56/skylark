@@ -189,6 +189,8 @@ export interface Department {
   created_at: string;
   /** 前端展示用 */
   member_count?: number;
+  /** 前端树状结构用 */
+  children?: Department[];
 }
 
 /* ==================== 加入申请相关 ==================== */

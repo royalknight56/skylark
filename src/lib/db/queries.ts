@@ -211,30 +211,66 @@ export async function getUserConversations(
     .prepare(
       `SELECT c.*,
         m.content as last_message,
-        m.created_at as last_message_at
+        m.created_at as last_message_at,
+        /* 私聊时取对方的名字和头像 */
+        peer.name as peer_name,
+        peer.avatar_url as peer_avatar
       FROM conversations c
       JOIN conversation_members cm ON c.id = cm.conversation_id
       LEFT JOIN messages m ON m.id = (
         SELECT id FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1
       )
+      /* 私聊对方：同会话中另一个成员 */
+      LEFT JOIN conversation_members cm2
+        ON c.id = cm2.conversation_id AND cm2.user_id != ? AND c.type = 'direct'
+      LEFT JOIN users peer ON cm2.user_id = peer.id
       WHERE cm.user_id = ? AND c.org_id = ?
       ORDER BY COALESCE(m.created_at, c.updated_at) DESC`
     )
-    .bind(userId, orgId)
-    .all<Conversation>();
+    .bind(userId, userId, orgId)
+    .all<Conversation & { peer_name: string | null; peer_avatar: string | null }>();
 
-  return result.results;
+  return result.results.map((row) => ({
+    ...row,
+    name: row.name || row.peer_name || null,
+    avatar_url: row.avatar_url || row.peer_avatar || null,
+  }));
 }
 
-/** 获取会话详情 */
+/** 获取会话详情（私聊时自动填充对方名字） */
 export async function getConversation(
   db: D1Database,
-  conversationId: string
+  conversationId: string,
+  currentUserId?: string
 ): Promise<Conversation | null> {
-  return db
-    .prepare('SELECT * FROM conversations WHERE id = ?')
-    .bind(conversationId)
-    .first<Conversation>();
+  if (!currentUserId) {
+    return db
+      .prepare('SELECT * FROM conversations WHERE id = ?')
+      .bind(conversationId)
+      .first<Conversation>();
+  }
+
+  const row = await db
+    .prepare(
+      `SELECT c.*,
+        peer.name as peer_name,
+        peer.avatar_url as peer_avatar
+      FROM conversations c
+      LEFT JOIN conversation_members cm2
+        ON c.id = cm2.conversation_id AND cm2.user_id != ? AND c.type = 'direct'
+      LEFT JOIN users peer ON cm2.user_id = peer.id
+      WHERE c.id = ?`
+    )
+    .bind(currentUserId, conversationId)
+    .first<Conversation & { peer_name: string | null; peer_avatar: string | null }>();
+
+  if (!row) return null;
+
+  return {
+    ...row,
+    name: row.name || row.peer_name || null,
+    avatar_url: row.avatar_url || row.peer_avatar || null,
+  };
 }
 
 /** 获取会话的所有成员 */

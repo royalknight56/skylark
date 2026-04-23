@@ -53,7 +53,7 @@ export default function ChatView({
 }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const displayName = conversation.name || "私聊";
+  const displayName = conversation.name || "未命名会话";
 
   /** 滚动到底部 */
   const scrollToBottom = useCallback(() => {

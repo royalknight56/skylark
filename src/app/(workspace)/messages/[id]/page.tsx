@@ -20,6 +20,7 @@ export default function ConversationPage() {
   const { user } = useAuth();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -34,6 +35,21 @@ export default function ConversationPage() {
       .catch(() => {});
   }, [currentOrg?.id, currentOrg]);
 
+  /** 从列表中匹配当前会话，找不到时单独拉取详情 */
+  useEffect(() => {
+    const found = conversations.find((c) => c.id === id);
+    if (found) {
+      setConversation(found);
+    } else if (id) {
+      fetch(`/api/conversations/${id}`)
+        .then((res) => res.json() as Promise<{ success: boolean; data?: Conversation }>)
+        .then((json) => {
+          if (json.success && json.data) setConversation(json.data);
+        })
+        .catch(() => {});
+    }
+  }, [conversations, id]);
+
   /** 拉取当前会话的消息 */
   useEffect(() => {
     if (!id) return;
@@ -46,8 +62,6 @@ export default function ConversationPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [id]);
-
-  const conversation = conversations.find((c) => c.id === id) ?? null;
 
   if (loading) {
     return (
