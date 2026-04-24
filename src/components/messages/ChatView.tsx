@@ -53,6 +53,7 @@ export default function ChatView({
 }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const displayName = conversation.name || "未命名会话";
 
   /** 滚动到底部 */
@@ -70,11 +71,91 @@ export default function ChatView({
     setMessages(initialMessages);
   }, [initialMessages]);
 
+  /** 建立 WebSocket 连接 */
+  useEffect(() => {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${proto}//${window.location.host}/api/ws/${conversation.id}`;
+
+    let ws: WebSocket;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+    let closed = false;
+
+    const connect = () => {
+      ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "message" && data.payload) {
+            const incoming = data.payload as {
+              id?: string;
+              content: string;
+              type?: string;
+              senderId: string;
+              senderName: string;
+              senderAvatar?: string | null;
+            };
+            // 忽略自己发的（已通过乐观更新展示）
+            if (incoming.senderId === currentUserId) return;
+
+            const newMsg: Message = {
+              id: incoming.id || `ws-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              conversation_id: conversation.id,
+              sender_id: incoming.senderId,
+              content: incoming.content,
+              type: (incoming.type as Message["type"]) || "text",
+              reply_to: null,
+              created_at: data.timestamp || new Date().toISOString(),
+              updated_at: null,
+              sender: {
+                id: incoming.senderId,
+                email: "",
+                name: incoming.senderName,
+                avatar_url: incoming.senderAvatar || null,
+                status: "online",
+                current_org_id: null,
+                created_at: "",
+              },
+            };
+
+            setMessages((prev) => [...prev, newMsg]);
+          }
+        } catch {
+          // 忽略无法解析的消息
+        }
+      };
+
+      ws.onclose = () => {
+        wsRef.current = null;
+        if (!closed) {
+          reconnectTimer = setTimeout(connect, 3000);
+        }
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
+    };
+
+    connect();
+
+    return () => {
+      closed = true;
+      clearTimeout(reconnectTimer);
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [conversation.id, currentUserId]);
+
   /** 发送消息 */
   const handleSend = async (content: string, type = "text") => {
     // 乐观更新：先在本地显示
+    const tempId = `temp-${Date.now()}`;
     const tempMsg: Message = {
-      id: `temp-${Date.now()}`,
+      id: tempId,
       conversation_id: conversation.id,
       sender_id: currentUserId,
       content,
@@ -102,9 +183,22 @@ export default function ChatView({
       });
       const data = (await res.json()) as { success: boolean; data?: Message };
       if (data.success && data.data) {
+        // 用服务端返回的消息替换临时消息
         setMessages((prev) =>
-          prev.map((m) => (m.id === tempMsg.id ? data.data! : m))
+          prev.map((m) => (m.id === tempId ? data.data! : m))
         );
+
+        // 通过 WebSocket 广播给其他用户
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({
+            type: "message",
+            payload: {
+              id: data.data.id,
+              content: data.data.content,
+              type: data.data.type,
+            },
+          }));
+        }
       }
     } catch {
       // 发送失败保留临时消息
