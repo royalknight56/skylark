@@ -9,7 +9,6 @@ import { getRequestUserId, requireOwner } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import type { OrgMemberRole } from "@/lib/types";
 
-export const runtime = "edge";
 
 /** GET /api/admin/members?org_id= */
 export async function GET(request: NextRequest) {

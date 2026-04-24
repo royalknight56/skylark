@@ -9,7 +9,6 @@ import { getBotByToken, createBotMessage, getBot } from "@/lib/db/queries";
 import { NextRequest, NextResponse } from "next/server";
 import type { BotSendMessagePayload } from "@/lib/types";
 
-export const runtime = "edge";
 
 /** 从 Authorization header 提取 bot token */
 function extractBotToken(request: NextRequest): string | null {

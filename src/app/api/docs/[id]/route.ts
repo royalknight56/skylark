@@ -7,7 +7,6 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getDocument, updateDocument } from "@/lib/db/queries";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** GET /api/docs/[id] - 获取文档详情 */
 export async function GET(

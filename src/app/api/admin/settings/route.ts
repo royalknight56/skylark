@@ -8,7 +8,6 @@ import { getOrganization, updateOrganization, regenerateInviteCode, createAdminL
 import { getRequestUserId, requireOwner } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** GET /api/admin/settings?org_id= */
 export async function GET(request: NextRequest) {

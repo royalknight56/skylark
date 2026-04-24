@@ -8,7 +8,6 @@ import { getContacts, addContact, removeContact } from "@/lib/db/queries";
 import { getRequestUserId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** GET /api/contacts?org_id=xxx */
 export async function GET(request: NextRequest) {

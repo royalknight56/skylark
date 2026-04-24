@@ -16,7 +16,6 @@ import {
 import { getRequestUserId, requireOwner } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** GET /api/admin/bots?org_id= — 列出企业所有机器人 */
 export async function GET(request: NextRequest) {

@@ -8,7 +8,6 @@ import { getDepartments, createDepartment, updateDepartment, deleteDepartment, c
 import { getRequestUserId, requireOwner } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** GET /api/admin/departments?org_id= */
 export async function GET(request: NextRequest) {

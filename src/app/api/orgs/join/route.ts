@@ -8,7 +8,6 @@ import { getOrgByInviteCode, joinOrganization, isOrgMember, hasPendingJoinReques
 import { getRequestUserId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** POST /api/orgs/join */
 export async function POST(request: NextRequest) {

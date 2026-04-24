@@ -7,7 +7,6 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getOrgMembers } from "@/lib/db/queries";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** GET /api/orgs/[id]/members - 获取企业成员列表 */
 export async function GET(

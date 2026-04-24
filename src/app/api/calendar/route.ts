@@ -8,7 +8,6 @@ import { getCalendarEvents, createCalendarEvent } from "@/lib/db/queries";
 import { getRequestUserId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** GET /api/calendar?org_id=xxx&start=&end= */
 export async function GET(request: NextRequest) {

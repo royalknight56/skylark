@@ -13,7 +13,6 @@ import {
 } from "@/lib/db/queries";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 function extractBotToken(request: NextRequest): string | null {
   const auth = request.headers.get("Authorization");

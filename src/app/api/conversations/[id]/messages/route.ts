@@ -10,7 +10,6 @@ import { getRequestUserId, getRequestUser } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import type { BotWebhookEvent } from "@/lib/types";
 
-export const runtime = "edge";
 
 /** 向机器人推送 webhook 事件（fire-and-forget，不阻塞响应） */
 async function pushWebhookEvent(bot: { id: string; webhook_url: string | null; webhook_secret: string | null }, event: BotWebhookEvent) {

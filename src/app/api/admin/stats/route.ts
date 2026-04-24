@@ -8,7 +8,6 @@ import { getOrgStats } from "@/lib/db/queries";
 import { getRequestUserId, requireOwner } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** GET /api/admin/stats?org_id= */
 export async function GET(request: NextRequest) {

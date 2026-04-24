@@ -8,7 +8,6 @@ import { findDirectConversation, createConversation } from "@/lib/db/queries";
 import { getRequestUserId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** POST /api/conversations/direct — 获取或创建私聊会话 */
 export async function POST(request: NextRequest) {

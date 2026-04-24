@@ -7,7 +7,6 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { generateUserId, ensureUser, AUTH_COOKIE } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** POST /api/auth/register - 注册新用户 */
 export async function POST(request: NextRequest) {

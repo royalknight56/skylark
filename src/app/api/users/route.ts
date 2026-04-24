@@ -7,7 +7,6 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getAllUsers } from "@/lib/db/queries";
 import { NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** GET /api/users - 获取用户列表 */
 export async function GET() {

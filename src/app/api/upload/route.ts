@@ -7,7 +7,6 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { uploadFile, generateR2Key } from "@/lib/r2";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** POST /api/upload - 上传文件 */
 export async function POST(request: NextRequest) {

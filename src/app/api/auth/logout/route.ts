@@ -6,7 +6,6 @@
 import { AUTH_COOKIE } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** POST /api/auth/logout - 登出 */
 export async function POST() {

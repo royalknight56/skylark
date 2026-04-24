@@ -8,7 +8,6 @@ import { getDocuments, createDocument } from "@/lib/db/queries";
 import { getRequestUserId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** GET /api/docs?org_id=xxx */
 export async function GET(request: NextRequest) {

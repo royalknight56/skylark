@@ -8,7 +8,6 @@ import { switchOrganization, isOrgMember } from "@/lib/db/queries";
 import { getRequestUserId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** POST /api/orgs/switch */
 export async function POST(request: NextRequest) {

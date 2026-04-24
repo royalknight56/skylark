@@ -7,7 +7,6 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getRequestUserId, getRequestUser } from "@/lib/auth";
 import { NextRequest } from "next/server";
 
-export const runtime = "edge";
 
 /** GET /api/ws/[conversationId] - WebSocket 升级 */
 export async function GET(

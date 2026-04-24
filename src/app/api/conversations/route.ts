@@ -8,7 +8,6 @@ import { getUserConversations, createConversation } from "@/lib/db/queries";
 import { getRequestUserId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "edge";
 
 /** GET /api/conversations?org_id=xxx */
 export async function GET(request: NextRequest) {
