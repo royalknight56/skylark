@@ -38,10 +38,13 @@ export async function POST(request: NextRequest) {
 
     const { env } = await getCloudflareContext();
     const body = (await request.json()) as {
-      org_id: string; title: string; description?: string;
+      org_id: string; title: string; description?: string; location?: string;
       start_time: string; end_time: string;
       all_day?: boolean; color?: string; attendee_ids?: string[];
       room_id?: string;
+      recurrence_rule?: string; recurrence_end?: string;
+      reminder_minutes?: number; visibility?: string;
+      optional_ids?: string[];
     };
 
     if (!body.org_id) return NextResponse.json({ success: false, error: "缺少 org_id" }, { status: 400 });
@@ -64,6 +67,7 @@ export async function POST(request: NextRequest) {
       org_id: body.org_id,
       title: body.title,
       description: body.description,
+      location: body.location,
       start_time: body.start_time,
       end_time: body.end_time,
       all_day: body.all_day,
@@ -71,6 +75,11 @@ export async function POST(request: NextRequest) {
       creator_id: userId,
       attendee_ids: body.attendee_ids || [userId],
       room_id: body.room_id,
+      recurrence_rule: body.recurrence_rule,
+      recurrence_end: body.recurrence_end,
+      reminder_minutes: body.reminder_minutes,
+      visibility: body.visibility,
+      optional_ids: body.optional_ids,
     });
 
     return NextResponse.json({ success: true, data: event }, { status: 201 });

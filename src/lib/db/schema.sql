@@ -294,24 +294,36 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   org_id TEXT NOT NULL,
   title TEXT NOT NULL,
   description TEXT,
+  location TEXT,
   start_time DATETIME NOT NULL,
   end_time DATETIME NOT NULL,
   all_day BOOLEAN DEFAULT 0,
   color TEXT DEFAULT '#3370FF',
   creator_id TEXT NOT NULL,
   room_id TEXT,
+  recurrence_rule TEXT,
+  recurrence_end TEXT,
+  reminder_minutes INTEGER DEFAULT 15,
+  visibility TEXT DEFAULT 'default' CHECK(visibility IN ('default','public','private')),
+  status TEXT DEFAULT 'confirmed' CHECK(status IN ('confirmed','cancelled')),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
   FOREIGN KEY (creator_id) REFERENCES users(id),
   FOREIGN KEY (room_id) REFERENCES meeting_rooms(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_calendar_events_room ON calendar_events(room_id);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_org ON calendar_events(org_id, start_time);
 
 CREATE TABLE IF NOT EXISTS calendar_attendees (
   event_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
-  status TEXT DEFAULT 'pending' CHECK(status IN ('accepted', 'declined', 'pending')),
+  status TEXT DEFAULT 'pending' CHECK(status IN ('accepted', 'declined', 'pending', 'tentative')),
+  is_optional BOOLEAN DEFAULT 0,
+  checked_in BOOLEAN DEFAULT 0,
+  checked_in_at DATETIME,
+  responded_at DATETIME,
   PRIMARY KEY (event_id, user_id),
   FOREIGN KEY (event_id) REFERENCES calendar_events(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id)

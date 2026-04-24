@@ -218,25 +218,45 @@ export interface MeetingRoom {
 
 export interface CalendarEvent {
   id: string;
+  org_id: string;
   title: string;
   description: string | null;
+  location: string | null;
   start_time: string;
   end_time: string;
   all_day: boolean;
   color: string;
   creator_id: string;
   room_id: string | null;
+  recurrence_rule: string | null;
+  recurrence_end: string | null;
+  reminder_minutes: number;
+  visibility: 'default' | 'public' | 'private';
+  status: 'confirmed' | 'cancelled';
   created_at: string;
+  updated_at: string;
   /** 前端展示用 */
   room?: MeetingRoom;
+  creator?: User;
+  attendees?: CalendarAttendee[];
+  /** 参与者统计 */
+  attendee_count?: number;
+  accepted_count?: number;
 }
 
-export type AttendeeStatus = 'accepted' | 'declined' | 'pending';
+/** 重复规则预设 */
+export type RecurrencePreset = 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'yearly' | 'weekdays';
+
+export type AttendeeStatus = 'accepted' | 'declined' | 'pending' | 'tentative';
 
 export interface CalendarAttendee {
   event_id: string;
   user_id: string;
   status: AttendeeStatus;
+  is_optional: boolean;
+  checked_in: boolean;
+  checked_in_at: string | null;
+  responded_at: string | null;
   user?: User;
 }
 

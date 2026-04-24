@@ -1114,7 +1114,7 @@ export async function getCalendarEvents(
   }));
 }
 
-/** 创建日历事件（支持预订会议室） */
+/** 创建日历事件（支持预订会议室、重复规则、地点等） */
 export async function createCalendarEvent(
   db: D1Database,
   event: {
@@ -1122,6 +1122,7 @@ export async function createCalendarEvent(
     org_id: string;
     title: string;
     description?: string;
+    location?: string;
     start_time: string;
     end_time: string;
     all_day?: boolean;
@@ -1129,24 +1130,32 @@ export async function createCalendarEvent(
     creator_id: string;
     attendee_ids: string[];
     room_id?: string;
+    recurrence_rule?: string;
+    recurrence_end?: string;
+    reminder_minutes?: number;
+    visibility?: string;
+    optional_ids?: string[];
   }
 ): Promise<CalendarEvent> {
   await db
     .prepare(
-      `INSERT INTO calendar_events (id, org_id, title, description, start_time, end_time, all_day, color, creator_id, room_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO calendar_events (id, org_id, title, description, location, start_time, end_time, all_day, color, creator_id, room_id, recurrence_rule, recurrence_end, reminder_minutes, visibility)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       event.id, event.org_id, event.title, event.description || null,
-      event.start_time, event.end_time, event.all_day ? 1 : 0,
-      event.color || '#3370FF', event.creator_id, event.room_id || null
+      event.location || null, event.start_time, event.end_time, event.all_day ? 1 : 0,
+      event.color || '#3370FF', event.creator_id, event.room_id || null,
+      event.recurrence_rule || null, event.recurrence_end || null,
+      event.reminder_minutes ?? 15, event.visibility || 'default'
     )
     .run();
 
+  const optionalSet = new Set(event.optional_ids || []);
   const stmts = event.attendee_ids.map((uid) =>
     db
-      .prepare('INSERT INTO calendar_attendees (event_id, user_id, status) VALUES (?, ?, ?)')
-      .bind(event.id, uid, uid === event.creator_id ? 'accepted' : 'pending')
+      .prepare('INSERT INTO calendar_attendees (event_id, user_id, status, is_optional) VALUES (?, ?, ?, ?)')
+      .bind(event.id, uid, uid === event.creator_id ? 'accepted' : 'pending', optionalSet.has(uid) ? 1 : 0)
   );
   if (stmts.length > 0) await db.batch(stmts);
 
@@ -1178,6 +1187,157 @@ export async function getEventAttendees(
       current_org_id: null, created_at: '',
     },
   }));
+}
+
+/** 更新日历事件 */
+export async function updateCalendarEvent(
+  db: D1Database,
+  eventId: string,
+  updates: {
+    title?: string;
+    description?: string | null;
+    location?: string | null;
+    start_time?: string;
+    end_time?: string;
+    all_day?: boolean;
+    color?: string;
+    room_id?: string | null;
+    recurrence_rule?: string | null;
+    recurrence_end?: string | null;
+    reminder_minutes?: number;
+    visibility?: string;
+    status?: string;
+  }
+): Promise<boolean> {
+  const setClauses: string[] = ["updated_at = CURRENT_TIMESTAMP"];
+  const values: (string | number | null)[] = [];
+
+  if (updates.title !== undefined) { setClauses.push("title = ?"); values.push(updates.title); }
+  if (updates.description !== undefined) { setClauses.push("description = ?"); values.push(updates.description); }
+  if (updates.location !== undefined) { setClauses.push("location = ?"); values.push(updates.location); }
+  if (updates.start_time !== undefined) { setClauses.push("start_time = ?"); values.push(updates.start_time); }
+  if (updates.end_time !== undefined) { setClauses.push("end_time = ?"); values.push(updates.end_time); }
+  if (updates.all_day !== undefined) { setClauses.push("all_day = ?"); values.push(updates.all_day ? 1 : 0); }
+  if (updates.color !== undefined) { setClauses.push("color = ?"); values.push(updates.color); }
+  if (updates.room_id !== undefined) { setClauses.push("room_id = ?"); values.push(updates.room_id); }
+  if (updates.recurrence_rule !== undefined) { setClauses.push("recurrence_rule = ?"); values.push(updates.recurrence_rule); }
+  if (updates.recurrence_end !== undefined) { setClauses.push("recurrence_end = ?"); values.push(updates.recurrence_end); }
+  if (updates.reminder_minutes !== undefined) { setClauses.push("reminder_minutes = ?"); values.push(updates.reminder_minutes); }
+  if (updates.visibility !== undefined) { setClauses.push("visibility = ?"); values.push(updates.visibility); }
+  if (updates.status !== undefined) { setClauses.push("status = ?"); values.push(updates.status); }
+
+  values.push(eventId);
+  await db.prepare(`UPDATE calendar_events SET ${setClauses.join(", ")} WHERE id = ?`).bind(...values).run();
+  return true;
+}
+
+/** 删除日历事件 */
+export async function deleteCalendarEvent(db: D1Database, eventId: string): Promise<void> {
+  await db.prepare('DELETE FROM calendar_events WHERE id = ?').bind(eventId).run();
+}
+
+/** 回复日程邀请（接受/拒绝/暂定） */
+export async function respondToEvent(
+  db: D1Database,
+  eventId: string,
+  userId: string,
+  status: 'accepted' | 'declined' | 'tentative'
+): Promise<boolean> {
+  await db
+    .prepare('UPDATE calendar_attendees SET status = ?, responded_at = CURRENT_TIMESTAMP WHERE event_id = ? AND user_id = ?')
+    .bind(status, eventId, userId)
+    .run();
+  return true;
+}
+
+/** 日程签到 */
+export async function checkInEvent(
+  db: D1Database,
+  eventId: string,
+  userId: string
+): Promise<boolean> {
+  await db
+    .prepare('UPDATE calendar_attendees SET checked_in = 1, checked_in_at = CURRENT_TIMESTAMP WHERE event_id = ? AND user_id = ?')
+    .bind(eventId, userId)
+    .run();
+  return true;
+}
+
+/** 转让日程（更改创建者） */
+export async function transferEvent(
+  db: D1Database,
+  eventId: string,
+  newCreatorId: string
+): Promise<void> {
+  await db.prepare('UPDATE calendar_events SET creator_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(newCreatorId, eventId).run();
+  await db.prepare('INSERT OR IGNORE INTO calendar_attendees (event_id, user_id, status) VALUES (?, ?, ?)').bind(eventId, newCreatorId, 'accepted').run();
+}
+
+/** 查询用户在指定时段的忙碌日程（用于忙闲视图） */
+export async function getUserBusySlots(
+  db: D1Database,
+  userId: string,
+  startDate: string,
+  endDate: string
+): Promise<{ start_time: string; end_time: string; title: string }[]> {
+  const result = await db
+    .prepare(
+      `SELECT ce.start_time, ce.end_time, ce.title
+       FROM calendar_events ce
+       JOIN calendar_attendees ca ON ce.id = ca.event_id
+       WHERE ca.user_id = ? AND ca.status != 'declined'
+         AND ce.start_time < ? AND ce.end_time > ?
+         AND ce.status = 'confirmed'
+       ORDER BY ce.start_time`
+    )
+    .bind(userId, endDate, startDate)
+    .all<{ start_time: string; end_time: string; title: string }>();
+  return result.results;
+}
+
+/** 获取单个日历事件的完整信息（含参与者） */
+export async function getCalendarEventDetail(
+  db: D1Database,
+  eventId: string
+): Promise<(CalendarEvent & { attendees: (CalendarAttendee & { user: User })[] }) | null> {
+  const event = await db
+    .prepare(
+      `SELECT ce.*, mr.name AS room_name, mr.building AS room_building,
+              mr.floor AS room_floor, mr.room_number AS room_room_number,
+              mr.capacity AS room_capacity,
+              u.name AS creator_name, u.avatar_url AS creator_avatar, u.email AS creator_email
+       FROM calendar_events ce
+       LEFT JOIN meeting_rooms mr ON ce.room_id = mr.id
+       LEFT JOIN users u ON ce.creator_id = u.id
+       WHERE ce.id = ?`
+    )
+    .bind(eventId)
+    .first<CalendarEvent & {
+      room_name: string | null; room_building: string | null;
+      room_floor: string | null; room_room_number: string | null;
+      room_capacity: number | null;
+      creator_name: string; creator_avatar: string | null; creator_email: string;
+    }>();
+
+  if (!event) return null;
+
+  const attendees = await getEventAttendees(db, eventId);
+
+  return {
+    ...event,
+    room: event.room_id && event.room_name ? {
+      id: event.room_id, org_id: event.org_id, name: event.room_name,
+      building: event.room_building!, floor: event.room_floor,
+      room_number: event.room_room_number!, capacity: event.room_capacity || 10,
+      facilities: null, status: 'available' as const, created_at: '',
+    } : undefined,
+    creator: {
+      id: event.creator_id, email: event.creator_email, name: event.creator_name,
+      avatar_url: event.creator_avatar, status: 'online' as const,
+      current_org_id: null, created_at: '',
+    },
+    attendees,
+  };
 }
 
 /* ==================== 云文档查询 ==================== */
