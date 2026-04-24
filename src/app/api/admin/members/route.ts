@@ -6,7 +6,9 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import {
   getOrgMembers, getMemberDetail, updateMemberRole,
-  updateMemberInfo, updateUserName, removeMember, createAdminLog,
+  updateMemberInfo, updateUserName, updateUserEmail,
+  updateUserLoginPhone, removeMember, suspendMember,
+  restoreMember, createAdminLog,
 } from "@/lib/db/queries";
 import { getRequestUserId, requireOwner } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
@@ -50,6 +52,9 @@ export async function PUT(request: NextRequest) {
       phone?: string | null;
       work_city?: string | null;
       gender?: string | null;
+      employee_type?: string | null;
+      email?: string;
+      login_phone?: string | null;
     };
 
     if (!body.org_id || !body.target_user_id) {
@@ -79,6 +84,25 @@ export async function PUT(request: NextRequest) {
       changes.push(`姓名→${body.name.trim()}`);
     }
 
+    // 登录邮箱变更
+    if (body.email !== undefined && body.email.trim()) {
+      const emailResult = await updateUserEmail(env.DB, body.target_user_id, body.email.trim());
+      if (!emailResult.ok) {
+        return NextResponse.json({ success: false, error: emailResult.reason }, { status: 400 });
+      }
+      changes.push(`登录邮箱→${body.email.trim()}`);
+    }
+
+    // 登录手机号变更
+    if (body.login_phone !== undefined) {
+      const phoneValue = body.login_phone?.trim() || null;
+      const phoneResult = await updateUserLoginPhone(env.DB, body.target_user_id, phoneValue);
+      if (!phoneResult.ok) {
+        return NextResponse.json({ success: false, error: phoneResult.reason }, { status: 400 });
+      }
+      changes.push(phoneValue ? `登录手机→${phoneValue}` : '清除登录手机');
+    }
+
     // org_members 工作信息变更
     const memberFields: Parameters<typeof updateMemberInfo>[3] = {};
     if (body.department !== undefined) memberFields.department = body.department;
@@ -87,6 +111,7 @@ export async function PUT(request: NextRequest) {
     if (body.phone !== undefined) memberFields.phone = body.phone;
     if (body.work_city !== undefined) memberFields.work_city = body.work_city;
     if (body.gender !== undefined) memberFields.gender = body.gender;
+    if (body.employee_type !== undefined) memberFields.employee_type = body.employee_type;
 
     if (Object.keys(memberFields).length > 0) {
       await updateMemberInfo(env.DB, body.org_id, body.target_user_id, memberFields);
@@ -106,6 +131,55 @@ export async function PUT(request: NextRequest) {
     }
 
     // 返回更新后的成员详情
+    const updated = await getMemberDetail(env.DB, body.org_id, body.target_user_id);
+    return NextResponse.json({ success: true, data: updated });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
+  }
+}
+
+/** PATCH /api/admin/members — 暂停/恢复成员账号 */
+export async function PATCH(request: NextRequest) {
+  try {
+    const userId = await getRequestUserId();
+    if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
+
+    const body = (await request.json()) as {
+      org_id: string;
+      target_user_id: string;
+      action: 'suspend' | 'restore';
+    };
+
+    if (!body.org_id || !body.target_user_id || !body.action) {
+      return NextResponse.json({ success: false, error: "参数不完整" }, { status: 400 });
+    }
+
+    if (body.target_user_id === userId) {
+      return NextResponse.json({ success: false, error: "不能操作自己的账号" }, { status: 400 });
+    }
+
+    const { env } = await getCloudflareContext();
+    const ownerRole = await requireOwner(env.DB, body.org_id, userId);
+    if (!ownerRole) return NextResponse.json({ success: false, error: "无管理权限" }, { status: 403 });
+
+    const result = body.action === 'suspend'
+      ? await suspendMember(env.DB, body.org_id, body.target_user_id)
+      : await restoreMember(env.DB, body.org_id, body.target_user_id);
+
+    if (!result.ok) {
+      return NextResponse.json({ success: false, error: result.reason }, { status: 400 });
+    }
+
+    await createAdminLog(env.DB, {
+      id: `log-${Date.now().toString(36)}`,
+      org_id: body.org_id,
+      operator_id: userId,
+      action: body.action === 'suspend' ? 'suspend_member' : 'restore_member',
+      target_type: 'member',
+      target_id: body.target_user_id,
+      detail: body.action === 'suspend' ? '暂停成员账号' : '恢复成员账号',
+    });
+
     const updated = await getMemberDetail(env.DB, body.org_id, body.target_user_id);
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {

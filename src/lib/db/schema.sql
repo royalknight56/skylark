@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS org_members (
   phone TEXT,
   work_city TEXT,
   gender TEXT CHECK(gender IN ('male', 'female', 'unknown') OR gender IS NULL),
+  employee_type TEXT,
+  member_status TEXT DEFAULT 'active' CHECK(member_status IN ('active', 'suspended', 'departed')),
+  suspended_at DATETIME,
+  departed_at DATETIME,
+  resource_receiver_id TEXT,
+  sort_order INTEGER DEFAULT 0,
   joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (org_id, user_id),
   FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
@@ -53,9 +59,11 @@ CREATE TABLE IF NOT EXISTS departments (
   org_id TEXT NOT NULL,
   name TEXT NOT NULL,
   parent_id TEXT,
+  leader_id TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
-  FOREIGN KEY (parent_id) REFERENCES departments(id) ON DELETE SET NULL
+  FOREIGN KEY (parent_id) REFERENCES departments(id) ON DELETE SET NULL,
+  FOREIGN KEY (leader_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- 加入申请表
@@ -91,6 +99,21 @@ CREATE TABLE IF NOT EXISTS admin_logs (
 
 CREATE INDEX IF NOT EXISTS idx_admin_logs_org_time ON admin_logs(org_id, created_at DESC);
 
+-- 人员类型表（企业可自定义）
+CREATE TABLE IF NOT EXISTS employee_types (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  is_builtin INTEGER DEFAULT 0,
+  is_active INTEGER DEFAULT 1,
+  is_default INTEGER DEFAULT 0,
+  sort_order INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_employee_types_org ON employee_types(org_id);
+
 -- ==================== 用户 ====================
 
 -- 用户表
@@ -99,6 +122,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   avatar_url TEXT,
+  login_phone TEXT UNIQUE,
   status TEXT DEFAULT 'offline' CHECK(status IN ('online', 'offline', 'busy', 'away')),
   current_org_id TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

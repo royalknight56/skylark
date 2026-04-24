@@ -24,6 +24,8 @@ interface OrgContextValue {
   orgs: Organization[];
   /** 是否正在加载企业列表 */
   loading: boolean;
+  /** 当前用户在当前企业中是否被暂停 */
+  isSuspended: boolean;
   /** 切换企业 */
   switchOrg: (org: Organization) => void;
   /** 新增企业到列表（创建/加入后调用） */
@@ -95,8 +97,10 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     setCurrentOrg(org);
   }, []);
 
+  const isSuspended = currentOrg?.member_status === 'suspended' || currentOrg?.member_status === 'departed';
+
   return (
-    <OrgContext.Provider value={{ currentOrg, orgs, loading, switchOrg, addOrg, refreshOrgs }}>
+    <OrgContext.Provider value={{ currentOrg, orgs, loading, isSuspended, switchOrg, addOrg, refreshOrgs }}>
       {children}
     </OrgContext.Provider>
   );

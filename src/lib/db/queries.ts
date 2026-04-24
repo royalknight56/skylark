@@ -29,6 +29,8 @@ import type {
   BaseView,
   BaseViewConfig,
   MeetingRoom,
+  EmployeeType,
+  MemberStatus,
 } from '../types';
 
 /* ==================== 企业/组织查询 ==================== */
@@ -37,17 +39,18 @@ import type {
 export async function getUserOrganizations(
   db: D1Database,
   userId: string
-): Promise<Organization[]> {
+): Promise<(Organization & { member_status?: string })[]> {
   const result = await db
     .prepare(
-      `SELECT o.*, (SELECT COUNT(*) FROM org_members WHERE org_id = o.id) as member_count
+      `SELECT o.*, om.member_status,
+        (SELECT COUNT(*) FROM org_members WHERE org_id = o.id) as member_count
        FROM organizations o
        JOIN org_members om ON o.id = om.org_id
        WHERE om.user_id = ?
        ORDER BY om.joined_at`
     )
     .bind(userId)
-    .all<Organization & { member_count: number }>();
+    .all<Organization & { member_count: number; member_status?: string }>();
   return result.results;
 }
 
@@ -149,15 +152,17 @@ export async function getOrgMembers(
 ): Promise<OrgMember[]> {
   const result = await db
     .prepare(
-      `SELECT om.*, u.name, u.email, u.avatar_url, u.status
+      `SELECT om.*, u.name, u.email, u.avatar_url, u.login_phone, u.status
        FROM org_members om JOIN users u ON om.user_id = u.id
-       WHERE om.org_id = ?
+       WHERE om.org_id = ? AND (om.member_status IS NULL OR om.member_status != 'departed')
        ORDER BY
+         CASE WHEN om.sort_order > 0 THEN 0 ELSE 1 END,
+         om.sort_order DESC,
          CASE om.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
          u.name`
     )
     .bind(orgId)
-    .all<OrgMember & { name: string; email: string; avatar_url: string | null; status: string }>();
+    .all<OrgMember & { name: string; email: string; avatar_url: string | null; login_phone?: string | null; status: string }>();
 
   return result.results.map((row) => ({
     ...row,
@@ -166,6 +171,7 @@ export async function getOrgMembers(
       email: row.email,
       name: row.name,
       avatar_url: row.avatar_url,
+      login_phone: row.login_phone ?? null,
       status: row.status as User['status'],
       current_org_id: orgId,
       created_at: '',
@@ -1021,6 +1027,7 @@ export async function updateMemberInfo(
     phone?: string | null;
     work_city?: string | null;
     gender?: string | null;
+    employee_type?: string | null;
   }
 ): Promise<void> {
   const sets: string[] = [];
@@ -1032,6 +1039,7 @@ export async function updateMemberInfo(
   if (fields.phone !== undefined) { sets.push('phone = ?'); values.push(fields.phone); }
   if (fields.work_city !== undefined) { sets.push('work_city = ?'); values.push(fields.work_city); }
   if (fields.gender !== undefined) { sets.push('gender = ?'); values.push(fields.gender); }
+  if (fields.employee_type !== undefined) { sets.push('employee_type = ?'); values.push(fields.employee_type); }
 
   if (sets.length === 0) return;
 
@@ -1073,6 +1081,36 @@ export async function updateUserName(db: D1Database, userId: string, name: strin
   await db.prepare('UPDATE users SET name = ? WHERE id = ?').bind(name, userId).run();
 }
 
+/** 修改用户登录邮箱（需先校验唯一性） */
+export async function updateUserEmail(
+  db: D1Database, userId: string, newEmail: string
+): Promise<{ ok: boolean; reason?: string }> {
+  const existing = await db
+    .prepare('SELECT id FROM users WHERE email = ? AND id != ?')
+    .bind(newEmail, userId)
+    .first<{ id: string }>();
+  if (existing) return { ok: false, reason: '该邮箱已被其他用户使用' };
+
+  await db.prepare('UPDATE users SET email = ? WHERE id = ?').bind(newEmail, userId).run();
+  return { ok: true };
+}
+
+/** 修改用户登录手机号（需先校验唯一性，传 null 清除手机号） */
+export async function updateUserLoginPhone(
+  db: D1Database, userId: string, phone: string | null
+): Promise<{ ok: boolean; reason?: string }> {
+  if (phone) {
+    const existing = await db
+      .prepare('SELECT id FROM users WHERE login_phone = ? AND id != ?')
+      .bind(phone, userId)
+      .first<{ id: string }>();
+    if (existing) return { ok: false, reason: '该手机号已被其他用户使用' };
+  }
+
+  await db.prepare('UPDATE users SET login_phone = ? WHERE id = ?').bind(phone, userId).run();
+  return { ok: true };
+}
+
 /** 移除成员 */
 export async function removeMember(
   db: D1Database,
@@ -1085,6 +1123,195 @@ export async function removeMember(
     .run();
 }
 
+/** 暂停成员账号 */
+export async function suspendMember(
+  db: D1Database, orgId: string, userId: string
+): Promise<{ ok: boolean; reason?: string }> {
+  const row = await db
+    .prepare('SELECT role, member_status FROM org_members WHERE org_id = ? AND user_id = ?')
+    .bind(orgId, userId)
+    .first<{ role: string; member_status: string | null }>();
+  if (!row) return { ok: false, reason: '成员不存在' };
+  if (row.role === 'owner') return { ok: false, reason: '不能暂停创建者账号' };
+  if (row.member_status === 'suspended') return { ok: false, reason: '该成员已处于暂停状态' };
+
+  await db
+    .prepare('UPDATE org_members SET member_status = ?, suspended_at = ? WHERE org_id = ? AND user_id = ?')
+    .bind('suspended', new Date().toISOString(), orgId, userId)
+    .run();
+  return { ok: true };
+}
+
+/** 恢复成员账号 */
+export async function restoreMember(
+  db: D1Database, orgId: string, userId: string
+): Promise<{ ok: boolean; reason?: string }> {
+  const row = await db
+    .prepare('SELECT member_status FROM org_members WHERE org_id = ? AND user_id = ?')
+    .bind(orgId, userId)
+    .first<{ member_status: string | null }>();
+  if (!row) return { ok: false, reason: '成员不存在' };
+  if (row.member_status !== 'suspended') return { ok: false, reason: '该成员未处于暂停状态' };
+
+  await db
+    .prepare('UPDATE org_members SET member_status = ?, suspended_at = NULL WHERE org_id = ? AND user_id = ?')
+    .bind('active', orgId, userId)
+    .run();
+  return { ok: true };
+}
+
+/** 检查成员是否被暂停 */
+export async function isMemberSuspended(
+  db: D1Database, orgId: string, userId: string
+): Promise<boolean> {
+  const row = await db
+    .prepare('SELECT member_status FROM org_members WHERE org_id = ? AND user_id = ?')
+    .bind(orgId, userId)
+    .first<{ member_status: string | null }>();
+  return row?.member_status === 'suspended';
+}
+
+/** 操作成员离职（标记为 departed + 可选资源转移） */
+export async function departMember(
+  db: D1Database,
+  orgId: string,
+  userId: string,
+  receiverId: string | null,
+  transferDocs: boolean,
+  transferEvents: boolean,
+  transferConversations: boolean,
+): Promise<{ ok: boolean; reason?: string; transferred: string[] }> {
+  const row = await db
+    .prepare('SELECT role, member_status FROM org_members WHERE org_id = ? AND user_id = ?')
+    .bind(orgId, userId)
+    .first<{ role: string; member_status: string | null }>();
+  if (!row) return { ok: false, reason: '成员不存在', transferred: [] };
+  if (row.role === 'owner') return { ok: false, reason: '不能操作创建者离职', transferred: [] };
+  if (row.member_status === 'departed') return { ok: false, reason: '该成员已离职', transferred: [] };
+
+  const now = new Date().toISOString();
+  const transferred: string[] = [];
+
+  // 资源转移
+  if (receiverId) {
+    if (transferDocs) {
+      const docs = await db
+        .prepare('UPDATE documents SET creator_id = ? WHERE org_id = ? AND creator_id = ?')
+        .bind(receiverId, orgId, userId).run();
+      transferred.push(`文档 ${docs.meta.changes} 篇`);
+    }
+    if (transferEvents) {
+      const events = await db
+        .prepare('UPDATE calendar_events SET creator_id = ? WHERE org_id = ? AND creator_id = ? AND start_time > ?')
+        .bind(receiverId, orgId, userId, now).run();
+      transferred.push(`未来日程 ${events.meta.changes} 个`);
+    }
+    if (transferConversations) {
+      const convos = await db
+        .prepare('UPDATE conversations SET created_by = ? WHERE org_id = ? AND created_by = ? AND type = ?')
+        .bind(receiverId, orgId, userId, 'group').run();
+      transferred.push(`群聊 ${convos.meta.changes} 个`);
+    }
+  }
+
+  // 标记离职
+  await db
+    .prepare('UPDATE org_members SET member_status = ?, departed_at = ?, resource_receiver_id = ? WHERE org_id = ? AND user_id = ?')
+    .bind('departed', now, receiverId, orgId, userId)
+    .run();
+
+  return { ok: true, transferred };
+}
+
+/** 获取已离职成员列表 */
+export async function getDepartedMembers(
+  db: D1Database, orgId: string
+): Promise<OrgMember[]> {
+  const result = await db
+    .prepare(
+      `SELECT om.*,
+        u.id as uid, u.email, u.name, u.avatar_url, u.status as ustatus, u.created_at as ucreated,
+        r.id as rid, r.name as rname, r.email as remail, r.avatar_url as ravatar
+       FROM org_members om
+       LEFT JOIN users u ON om.user_id = u.id
+       LEFT JOIN users r ON om.resource_receiver_id = r.id
+       WHERE om.org_id = ? AND om.member_status = 'departed'
+       ORDER BY om.departed_at DESC`
+    )
+    .bind(orgId)
+    .all();
+  return result.results.map((r: Record<string, unknown>) => ({
+    org_id: r.org_id as string,
+    user_id: r.user_id as string,
+    role: r.role as OrgMemberRole,
+    department: r.department as string | null,
+    title: r.title as string | null,
+    employee_id: r.employee_id as string | null,
+    phone: r.phone as string | null,
+    work_city: r.work_city as string | null,
+    gender: r.gender as string | null,
+    employee_type: r.employee_type as string | null,
+    member_status: r.member_status as MemberStatus,
+    suspended_at: r.suspended_at as string | null,
+    departed_at: r.departed_at as string | null,
+    resource_receiver_id: r.resource_receiver_id as string | null,
+    joined_at: r.joined_at as string,
+    user: r.uid ? {
+      id: r.uid as string, email: r.email as string, name: r.name as string,
+      avatar_url: r.avatar_url as string | null, status: (r.ustatus || 'offline') as User['status'],
+      current_org_id: null, created_at: r.ucreated as string,
+    } : undefined,
+    receiver: r.rid ? {
+      id: r.rid as string, email: r.remail as string, name: r.rname as string,
+      avatar_url: r.ravatar as string | null, status: 'offline' as const,
+      current_org_id: null, created_at: '',
+    } : undefined,
+  })) as OrgMember[];
+}
+
+/** 恢复离职成员 */
+export async function restoreDepartedMember(
+  db: D1Database, orgId: string, userId: string
+): Promise<{ ok: boolean; reason?: string }> {
+  const row = await db
+    .prepare('SELECT member_status, departed_at FROM org_members WHERE org_id = ? AND user_id = ?')
+    .bind(orgId, userId)
+    .first<{ member_status: string | null; departed_at: string | null }>();
+  if (!row) return { ok: false, reason: '成员不存在' };
+  if (row.member_status !== 'departed') return { ok: false, reason: '该成员不是离职状态' };
+
+  // 30天内可恢复
+  if (row.departed_at) {
+    const departedTime = new Date(row.departed_at).getTime();
+    const daysSince = (Date.now() - departedTime) / (1000 * 60 * 60 * 24);
+    if (daysSince > 30) return { ok: false, reason: '离职超过30天，无法恢复' };
+  }
+
+  await db
+    .prepare('UPDATE org_members SET member_status = ?, departed_at = NULL, resource_receiver_id = NULL WHERE org_id = ? AND user_id = ?')
+    .bind('active', orgId, userId)
+    .run();
+  return { ok: true };
+}
+
+/** 永久删除离职成员 */
+export async function permanentDeleteMember(
+  db: D1Database, orgId: string, userId: string
+): Promise<{ ok: boolean; reason?: string }> {
+  const row = await db
+    .prepare('SELECT member_status FROM org_members WHERE org_id = ? AND user_id = ?')
+    .bind(orgId, userId)
+    .first<{ member_status: string | null }>();
+  if (!row) return { ok: false, reason: '成员不存在' };
+  if (row.member_status !== 'departed') return { ok: false, reason: '只能删除已离职成员' };
+
+  await db
+    .prepare('DELETE FROM org_members WHERE org_id = ? AND user_id = ?')
+    .bind(orgId, userId)
+    .run();
+  return { ok: true };
+}
+
 /* ==================== 管理后台：部门 ==================== */
 
 /** 获取企业的部门列表 */
@@ -1095,23 +1322,39 @@ export async function getDepartments(
   const result = await db
     .prepare(
       `SELECT d.*,
-        (SELECT COUNT(*) FROM org_members WHERE org_id = d.org_id AND department = d.name) as member_count
-       FROM departments d WHERE d.org_id = ?
+        (SELECT COUNT(*) FROM org_members WHERE org_id = d.org_id AND department = d.name AND (member_status IS NULL OR member_status != 'departed')) as member_count,
+        u.id as lid, u.name as lname, u.email as lemail, u.avatar_url as lavatar
+       FROM departments d
+       LEFT JOIN users u ON d.leader_id = u.id
+       WHERE d.org_id = ?
        ORDER BY d.name`
     )
     .bind(orgId)
-    .all<Department & { member_count: number }>();
-  return result.results;
+    .all();
+  return result.results.map((r: Record<string, unknown>) => ({
+    id: r.id as string,
+    org_id: r.org_id as string,
+    name: r.name as string,
+    parent_id: r.parent_id as string | null,
+    leader_id: r.leader_id as string | null,
+    created_at: r.created_at as string,
+    member_count: r.member_count as number,
+    leader: r.lid ? {
+      id: r.lid as string, name: r.lname as string, email: r.lemail as string,
+      avatar_url: r.lavatar as string | null, status: 'offline' as const,
+      current_org_id: null, created_at: '',
+    } : undefined,
+  })) as Department[];
 }
 
 /** 创建部门 */
 export async function createDepartment(
   db: D1Database,
-  dept: { id: string; org_id: string; name: string; parent_id?: string }
+  dept: { id: string; org_id: string; name: string; parent_id?: string; leader_id?: string }
 ): Promise<Department> {
   await db
-    .prepare('INSERT INTO departments (id, org_id, name, parent_id) VALUES (?, ?, ?, ?)')
-    .bind(dept.id, dept.org_id, dept.name, dept.parent_id || null)
+    .prepare('INSERT INTO departments (id, org_id, name, parent_id, leader_id) VALUES (?, ?, ?, ?, ?)')
+    .bind(dept.id, dept.org_id, dept.name, dept.parent_id || null, dept.leader_id || null)
     .run();
   return db
     .prepare('SELECT * FROM departments WHERE id = ?')
@@ -1119,16 +1362,24 @@ export async function createDepartment(
     .first<Department>() as Promise<Department>;
 }
 
-/** 更新部门名称 */
+/** 更新部门（名称 + 负责人） */
 export async function updateDepartment(
   db: D1Database,
   deptId: string,
-  name: string
+  name: string,
+  leaderId?: string | null
 ): Promise<void> {
-  await db
-    .prepare('UPDATE departments SET name = ? WHERE id = ?')
-    .bind(name, deptId)
-    .run();
+  if (leaderId !== undefined) {
+    await db
+      .prepare('UPDATE departments SET name = ?, leader_id = ? WHERE id = ?')
+      .bind(name, leaderId, deptId)
+      .run();
+  } else {
+    await db
+      .prepare('UPDATE departments SET name = ? WHERE id = ?')
+      .bind(name, deptId)
+      .run();
+  }
 }
 
 /** 删除部门 */
@@ -1622,6 +1873,152 @@ export async function createBotMessage(
   };
 }
 
+/* ==================== 人员类型查询 ==================== */
+
+/** 预置人员类型列表 */
+const BUILTIN_EMPLOYEE_TYPES = ['正式', '实习', '外包', '劳务', '顾问'];
+
+/** 初始化企业的预置人员类型（仅当该企业还没有任何记录时） */
+export async function ensureBuiltinEmployeeTypes(db: D1Database, orgId: string): Promise<void> {
+  const existing = await db
+    .prepare('SELECT COUNT(*) as cnt FROM employee_types WHERE org_id = ?')
+    .bind(orgId)
+    .first<{ cnt: number }>();
+  if (existing && existing.cnt > 0) return;
+
+  const stmts = BUILTIN_EMPLOYEE_TYPES.map((name, i) =>
+    db.prepare(
+      `INSERT INTO employee_types (id, org_id, name, is_builtin, is_active, is_default, sort_order)
+       VALUES (?, ?, ?, 1, 1, ?, ?)`
+    ).bind(`et-builtin-${i + 1}`, orgId, name, i === 0 ? 1 : 0, i)
+  );
+  await db.batch(stmts);
+}
+
+/** D1 返回的人员类型原始行（boolean 字段为 number） */
+interface EmployeeTypeRow {
+  id: string; org_id: string; name: string;
+  is_builtin: number; is_active: number; is_default: number;
+  sort_order: number; created_at: string;
+}
+
+function mapEmployeeTypeRow(r: EmployeeTypeRow): EmployeeType {
+  return {
+    id: r.id, org_id: r.org_id, name: r.name,
+    is_builtin: r.is_builtin === 1,
+    is_active: r.is_active === 1,
+    is_default: r.is_default === 1,
+    sort_order: r.sort_order, created_at: r.created_at,
+  };
+}
+
+/** 获取企业所有人员类型 */
+export async function getEmployeeTypes(db: D1Database, orgId: string): Promise<EmployeeType[]> {
+  await ensureBuiltinEmployeeTypes(db, orgId);
+  const result = await db
+    .prepare('SELECT * FROM employee_types WHERE org_id = ? ORDER BY sort_order, created_at')
+    .bind(orgId)
+    .all<EmployeeTypeRow>();
+  return result.results.map(mapEmployeeTypeRow);
+}
+
+/** 获取企业活跃的人员类型（给成员选择用） */
+export async function getActiveEmployeeTypes(db: D1Database, orgId: string): Promise<EmployeeType[]> {
+  await ensureBuiltinEmployeeTypes(db, orgId);
+  const result = await db
+    .prepare('SELECT * FROM employee_types WHERE org_id = ? AND is_active = 1 ORDER BY sort_order, created_at')
+    .bind(orgId)
+    .all<EmployeeTypeRow>();
+  return result.results.map(mapEmployeeTypeRow);
+}
+
+/** 创建自定义人员类型 */
+export async function createEmployeeType(
+  db: D1Database,
+  id: string,
+  orgId: string,
+  name: string
+): Promise<EmployeeType> {
+  const maxOrder = await db
+    .prepare('SELECT MAX(sort_order) as mx FROM employee_types WHERE org_id = ?')
+    .bind(orgId)
+    .first<{ mx: number | null }>();
+  const order = (maxOrder?.mx ?? -1) + 1;
+
+  await db.prepare(
+    `INSERT INTO employee_types (id, org_id, name, is_builtin, is_active, is_default, sort_order)
+     VALUES (?, ?, ?, 0, 1, 0, ?)`
+  ).bind(id, orgId, name, order).run();
+
+  return {
+    id, org_id: orgId, name,
+    is_builtin: false, is_active: true, is_default: false,
+    sort_order: order, created_at: new Date().toISOString(),
+  };
+}
+
+/** 切换人员类型启用/停用状态 */
+export async function toggleEmployeeType(db: D1Database, id: string, isActive: boolean): Promise<void> {
+  await db.prepare('UPDATE employee_types SET is_active = ? WHERE id = ?')
+    .bind(isActive ? 1 : 0, id).run();
+}
+
+/** 设置默认人员类型（先清除旧默认，再设新默认） */
+export async function setDefaultEmployeeType(db: D1Database, orgId: string, typeId: string): Promise<void> {
+  await db.prepare('UPDATE employee_types SET is_default = 0 WHERE org_id = ?').bind(orgId).run();
+  await db.prepare('UPDATE employee_types SET is_default = 1 WHERE id = ? AND org_id = ?')
+    .bind(typeId, orgId).run();
+}
+
+/** 删除自定义人员类型（仅非内置类型可删；需检查是否有成员在用） */
+export async function deleteEmployeeType(db: D1Database, orgId: string, typeId: string): Promise<{ ok: boolean; reason?: string }> {
+  const et = await db
+    .prepare('SELECT is_builtin, name FROM employee_types WHERE id = ? AND org_id = ?')
+    .bind(typeId, orgId)
+    .first<{ is_builtin: number; name: string }>();
+  if (!et) return { ok: false, reason: '人员类型不存在' };
+  if (et.is_builtin === 1) return { ok: false, reason: '预置类型不可删除' };
+
+  const usedCount = await db
+    .prepare('SELECT COUNT(*) as cnt FROM org_members WHERE org_id = ? AND employee_type = ?')
+    .bind(orgId, et.name)
+    .first<{ cnt: number }>();
+  if (usedCount && usedCount.cnt > 0) {
+    return { ok: false, reason: `仍有 ${usedCount.cnt} 名成员使用该类型，请先修改后再删除` };
+  }
+
+  await db.prepare('DELETE FROM employee_types WHERE id = ? AND org_id = ?').bind(typeId, orgId).run();
+  return { ok: true };
+}
+
+/** 批量新增自定义人员类型 */
+export async function batchCreateEmployeeTypes(
+  db: D1Database, orgId: string, names: string[]
+): Promise<EmployeeType[]> {
+  const maxOrder = await db
+    .prepare('SELECT MAX(sort_order) as mx FROM employee_types WHERE org_id = ?')
+    .bind(orgId)
+    .first<{ mx: number | null }>();
+  let order = (maxOrder?.mx ?? -1) + 1;
+
+  const results: EmployeeType[] = [];
+  const stmts = names.map((name) => {
+    const id = `et-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    const o = order++;
+    results.push({
+      id, org_id: orgId, name,
+      is_builtin: false, is_active: true, is_default: false,
+      sort_order: o, created_at: new Date().toISOString(),
+    });
+    return db.prepare(
+      `INSERT INTO employee_types (id, org_id, name, is_builtin, is_active, is_default, sort_order)
+       VALUES (?, ?, ?, 0, 1, 0, ?)`
+    ).bind(id, orgId, name, o);
+  });
+  await db.batch(stmts);
+  return results;
+}
+
 /* ==================== 多维表格查询 ==================== */
 
 /** 生成短 ID */
@@ -1940,4 +2337,42 @@ export async function updateBaseView(db: D1Database, viewId: string, data: { nam
 /** 删除视图 */
 export async function deleteBaseView(db: D1Database, viewId: string) {
   await db.prepare('DELETE FROM base_views WHERE id = ?').bind(viewId).run();
+}
+
+// ─── 成员排序 ─────────────────────────────────
+
+/** 置顶成员（设置 sort_order） */
+export async function pinMember(db: D1Database, orgId: string, userId: string) {
+  const max = await db
+    .prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM org_members WHERE org_id = ?')
+    .bind(orgId)
+    .first<{ m: number }>();
+  const next = (max?.m ?? 0) + 1;
+  await db
+    .prepare('UPDATE org_members SET sort_order = ? WHERE org_id = ? AND user_id = ?')
+    .bind(next, orgId, userId)
+    .run();
+  return next;
+}
+
+/** 取消置顶 */
+export async function unpinMember(db: D1Database, orgId: string, userId: string) {
+  await db
+    .prepare('UPDATE org_members SET sort_order = 0 WHERE org_id = ? AND user_id = ?')
+    .bind(orgId, userId)
+    .run();
+}
+
+/** 批量更新成员排序（拖拽重排后提交） */
+export async function batchUpdateSortOrder(
+  db: D1Database,
+  orgId: string,
+  orders: { user_id: string; sort_order: number }[]
+) {
+  const stmts = orders.map((o) =>
+    db
+      .prepare('UPDATE org_members SET sort_order = ? WHERE org_id = ? AND user_id = ?')
+      .bind(o.sort_order, orgId, o.user_id)
+  );
+  await db.batch(stmts);
 }

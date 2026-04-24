@@ -21,6 +21,7 @@ import {
   ShieldX,
   Bot,
   DoorOpen,
+  Tag,
 } from "lucide-react";
 import { useOrg } from "@/lib/org-context";
 import { useAuth } from "@/lib/auth-context";
@@ -30,6 +31,7 @@ const adminNav = [
   { icon: BarChart3, label: "仪表盘", href: "/admin" },
   { icon: Users, label: "成员管理", href: "/admin/members" },
   { icon: Building2, label: "部门管理", href: "/admin/departments" },
+  { icon: Tag, label: "人员类型", href: "/admin/employee-types" },
   { icon: Settings, label: "企业设置", href: "/admin/settings" },
   { icon: ClipboardCheck, label: "加入审批", href: "/admin/join-requests" },
   { icon: DoorOpen, label: "会议室管理", href: "/admin/rooms" },

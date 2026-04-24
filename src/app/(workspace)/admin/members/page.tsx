@@ -6,19 +6,21 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Search, Loader2, Users, ChevronDown,
   X, Pencil, Trash2, Shield, Phone,
   Mail, Building2, Briefcase, Hash,
   MapPin, User2, Calendar, Check,
   UserPlus, Send, Copy, Clock, Link,
-  XCircle, Plus,
+  XCircle, Plus, Tag, KeyRound, Smartphone,
+  ShieldOff, Play, Pause, LogOut, RotateCcw, UserX,
+  Pin, PinOff, GripVertical,
 } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
 import { useOrg } from "@/lib/org-context";
 import { useAuth } from "@/lib/auth-context";
-import type { OrgMember, OrgMemberRole, OrgInvite, User, Gender, Department } from "@/lib/types";
+import type { OrgMember, OrgMemberRole, OrgInvite, User, Gender, Department, EmployeeType } from "@/lib/types";
 
 /** 角色配置 */
 const ROLE_CONFIG: Record<OrgMemberRole, { label: string; badge: string }> = {
@@ -33,8 +35,8 @@ const GENDER_OPTIONS: { value: Gender | ""; label: string }[] = [
   { value: "female", label: "女" },
 ];
 
-type MemberWithUser = OrgMember & { user: User };
-type ActiveTab = "members" | "invites";
+type MemberWithUser = OrgMember & { user: User; receiver?: User };
+type ActiveTab = "members" | "invites" | "departed";
 
 export default function AdminMembersPage() {
   const { currentOrg } = useOrg();
@@ -50,6 +52,7 @@ export default function AdminMembersPage() {
   const [selectedMember, setSelectedMember] = useState<MemberWithUser | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   // 编辑表单
   const [editName, setEditName] = useState("");
@@ -60,6 +63,9 @@ export default function AdminMembersPage() {
   const [editWorkCity, setEditWorkCity] = useState("");
   const [editGender, setEditGender] = useState<Gender | "">("");
   const [editRole, setEditRole] = useState<OrgMemberRole>("member");
+  const [editEmployeeType, setEditEmployeeType] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editLoginPhone, setEditLoginPhone] = useState("");
 
   // 邀请弹窗
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -70,6 +76,19 @@ export default function AdminMembersPage() {
     invited: OrgInvite[];
     skipped: { email: string; reason: string }[];
   } | null>(null);
+
+  // 已离职成员
+  const [departedMembers, setDepartedMembers] = useState<MemberWithUser[]>([]);
+  const [departedLoading, setDepartedLoading] = useState(false);
+
+  // 离职弹窗
+  const [showDepartModal, setShowDepartModal] = useState(false);
+  const [departTarget, setDepartTarget] = useState<MemberWithUser | null>(null);
+  const [departReceiverId, setDepartReceiverId] = useState("");
+  const [transferDocs, setTransferDocs] = useState(true);
+  const [transferEvents, setTransferEvents] = useState(true);
+  const [transferConversations, setTransferConversations] = useState(true);
+  const [departing, setDeparting] = useState(false);
 
   /** 加载成员列表 */
   const loadMembers = useCallback(async () => {
@@ -95,6 +114,8 @@ export default function AdminMembersPage() {
 
   // 部门数据（从部门管理 API 获取）
   const [deptList, setDeptList] = useState<Department[]>([]);
+  // 人员类型（活跃的，从人员类型管理 API 获取）
+  const [employeeTypes, setEmployeeTypes] = useState<EmployeeType[]>([]);
 
   const loadDepartments = useCallback(async () => {
     if (!currentOrg) return;
@@ -105,7 +126,16 @@ export default function AdminMembersPage() {
     } catch { /* ignore */ }
   }, [currentOrg]);
 
-  useEffect(() => { loadMembers(); loadInvites(); loadDepartments(); }, [loadMembers, loadInvites, loadDepartments]);
+  const loadEmployeeTypes = useCallback(async () => {
+    if (!currentOrg) return;
+    try {
+      const res = await fetch(`/api/admin/employee-types?org_id=${currentOrg.id}`);
+      const json = (await res.json()) as { success: boolean; data?: EmployeeType[] };
+      if (json.success && json.data) setEmployeeTypes(json.data.filter((t) => t.is_active));
+    } catch { /* ignore */ }
+  }, [currentOrg]);
+
+  useEffect(() => { loadMembers(); loadInvites(); loadDepartments(); loadEmployeeTypes(); }, [loadMembers, loadInvites, loadDepartments, loadEmployeeTypes]);
 
   /** 扁平化部门名称（用于筛选和选择） */
   const departments = useMemo(() => deptList.map((d) => d.name).sort(), [deptList]);
@@ -147,6 +177,9 @@ export default function AdminMembersPage() {
     setEditWorkCity(m.work_city || "");
     setEditGender(m.gender || "");
     setEditRole(m.role);
+    setEditEmployeeType(m.employee_type || "");
+    setEditEmail(m.user?.email || "");
+    setEditLoginPhone(m.user?.login_phone || "");
   };
 
   /** 保存编辑 */
@@ -165,6 +198,11 @@ export default function AdminMembersPage() {
       if (editPhone !== (selectedMember.phone || "")) payload.phone = editPhone || null;
       if (editWorkCity !== (selectedMember.work_city || "")) payload.work_city = editWorkCity || null;
       if (editGender !== (selectedMember.gender || "")) payload.gender = editGender || null;
+      if (editEmployeeType !== (selectedMember.employee_type || "")) payload.employee_type = editEmployeeType || null;
+      if (editEmail.trim() && editEmail.trim() !== (selectedMember.user?.email || ""))
+        payload.email = editEmail.trim();
+      if (editLoginPhone !== (selectedMember.user?.login_phone || ""))
+        payload.login_phone = editLoginPhone || null;
       if (editRole !== selectedMember.role && selectedMember.user_id !== user?.id)
         payload.role = editRole;
 
@@ -173,21 +211,147 @@ export default function AdminMembersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json = (await res.json()) as { success: boolean; data?: MemberWithUser };
+      const json = (await res.json()) as { success: boolean; data?: MemberWithUser; error?: string };
       if (json.success) {
         setEditing(false);
+        setSaveError("");
         if (json.data) {
           setSelectedMember(json.data);
           setMembers((prev) => prev.map((m) => (m.user_id === json.data!.user_id ? json.data! : m)));
         } else {
           await loadMembers();
         }
+      } else {
+        setSaveError(json.error || "保存失败");
       }
-    } catch { /* ignore */ }
+    } catch { setSaveError("网络错误"); }
     finally { setSaving(false); }
   };
 
-  /** 移除成员 */
+  /** 加载已离职成员 */
+  const loadDeparted = useCallback(async () => {
+    if (!currentOrg) return;
+    setDepartedLoading(true);
+    try {
+      const res = await fetch(`/api/admin/departed?org_id=${currentOrg.id}`);
+      const json = (await res.json()) as { success: boolean; data?: MemberWithUser[] };
+      if (json.success && json.data) setDepartedMembers(json.data);
+    } catch { /* ignore */ }
+    setDepartedLoading(false);
+  }, [currentOrg]);
+
+  useEffect(() => {
+    if (activeTab === "departed") loadDeparted();
+  }, [activeTab, loadDeparted]);
+
+  /** 打开离职弹窗 */
+  const openDepartModal = (member: MemberWithUser) => {
+    setDepartTarget(member);
+    setDepartReceiverId("");
+    setTransferDocs(true);
+    setTransferEvents(true);
+    setTransferConversations(true);
+    setShowDepartModal(true);
+  };
+
+  /** 确认离职 */
+  const handleDepart = async () => {
+    if (!currentOrg || !departTarget) return;
+    setDeparting(true);
+    try {
+      const res = await fetch("/api/admin/departed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          org_id: currentOrg.id,
+          target_user_id: departTarget.user_id,
+          receiver_id: departReceiverId || null,
+          transfer_docs: transferDocs,
+          transfer_events: transferEvents,
+          transfer_conversations: transferConversations,
+        }),
+      });
+      const json = (await res.json()) as { success: boolean; error?: string; transferred?: string[] };
+      if (json.success) {
+        setShowDepartModal(false);
+        setSelectedMember(null);
+        await loadMembers();
+        alert(`操作成功${json.transferred?.length ? `，已转移：${json.transferred.join('、')}` : ''}`);
+      } else {
+        alert(json.error || "操作失败");
+      }
+    } catch { alert("网络错误"); }
+    setDeparting(false);
+  };
+
+  /** 恢复离职成员 */
+  const handleRestoreDeparted = async (m: MemberWithUser) => {
+    if (!currentOrg) return;
+    if (!confirm(`确定恢复成员「${m.user?.name}」？恢复后该成员将重新变为正常状态。`)) return;
+    try {
+      const res = await fetch("/api/admin/departed", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ org_id: currentOrg.id, target_user_id: m.user_id }),
+      });
+      const json = (await res.json()) as { success: boolean; error?: string };
+      if (json.success) {
+        await loadDeparted();
+        await loadMembers();
+      } else {
+        alert(json.error || "恢复失败");
+      }
+    } catch { alert("网络错误"); }
+  };
+
+  /** 永久删除离职成员 */
+  const handlePermanentDelete = async (m: MemberWithUser) => {
+    if (!currentOrg) return;
+    if (!confirm(`确定永久删除成员「${m.user?.name}」？此操作不可撤销，删除后无法恢复。`)) return;
+    try {
+      const res = await fetch("/api/admin/departed", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ org_id: currentOrg.id, target_user_id: m.user_id }),
+      });
+      const json = (await res.json()) as { success: boolean; error?: string };
+      if (json.success) {
+        await loadDeparted();
+      } else {
+        alert(json.error || "删除失败");
+      }
+    } catch { alert("网络错误"); }
+  };
+
+  /** 暂停/恢复成员 */
+  const [suspending, setSuspending] = useState(false);
+  const handleSuspendToggle = async () => {
+    if (!currentOrg || !selectedMember) return;
+    const action = selectedMember.member_status === 'suspended' ? 'restore' : 'suspend';
+    const label = action === 'suspend' ? '暂停' : '恢复';
+    if (!confirm(`确定${label}成员「${selectedMember.user?.name}」的账号？`)) return;
+    setSuspending(true);
+    try {
+      const res = await fetch("/api/admin/members", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          org_id: currentOrg.id,
+          target_user_id: selectedMember.user_id,
+          action,
+        }),
+      });
+      const json = (await res.json()) as { success: boolean; data?: MemberWithUser; error?: string };
+      if (json.success && json.data) {
+        setSelectedMember(json.data);
+        setMembers((prev) => prev.map((m) => (m.user_id === json.data!.user_id ? json.data! : m)));
+      } else {
+        alert(json.error || `${label}失败`);
+      }
+    } catch { alert('网络错误'); }
+    setSuspending(false);
+  };
+
   const handleRemove = async (member: MemberWithUser) => {
     if (!currentOrg || member.role === "owner" || member.user_id === user?.id) return;
     if (!confirm(`确定移除成员「${member.user?.name}」？此操作不可撤销。`)) return;
@@ -200,6 +364,76 @@ export default function AdminMembersPage() {
       setSelectedMember(null);
       await loadMembers();
     } catch { /* ignore */ }
+  };
+
+  /** 置顶 / 取消置顶成员 */
+  const handlePin = async (m: MemberWithUser, pin: boolean) => {
+    if (!currentOrg) return;
+    try {
+      const res = await fetch("/api/admin/members/sort", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          org_id: currentOrg.id,
+          action: pin ? "pin" : "unpin",
+          user_id: m.user_id,
+        }),
+      });
+      const json = (await res.json()) as { success: boolean };
+      if (json.success) await loadMembers();
+    } catch { /* ignore */ }
+  };
+
+  /** 拖拽排序相关 */
+  const dragIndex = useRef<number | null>(null);
+  const dragOverIndex = useRef<number | null>(null);
+
+  const pinnedMembers = useMemo(
+    () => filteredMembers.filter((m) => m.sort_order > 0),
+    [filteredMembers]
+  );
+
+  const handleDragStart = (idx: number) => {
+    dragIndex.current = idx;
+  };
+
+  const handleDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    dragOverIndex.current = idx;
+  };
+
+  const handleDrop = async () => {
+    if (!currentOrg) return;
+    const from = dragIndex.current;
+    const to = dragOverIndex.current;
+    if (from === null || to === null || from === to) return;
+
+    const reordered = [...pinnedMembers];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+
+    // sort_order 越大越靠前，从 N 递减到 1
+    const orders = reordered.map((m, i) => ({
+      user_id: m.user_id,
+      sort_order: reordered.length - i,
+    }));
+
+    try {
+      const res = await fetch("/api/admin/members/sort", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          org_id: currentOrg.id,
+          action: "batch",
+          orders,
+        }),
+      });
+      const json = (await res.json()) as { success: boolean };
+      if (json.success) await loadMembers();
+    } catch { /* ignore */ }
+
+    dragIndex.current = null;
+    dragOverIndex.current = null;
   };
 
   /** 发送邀请 */
@@ -316,6 +550,18 @@ export default function AdminMembersPage() {
               </span>
             )}
           </button>
+          <button onClick={() => setActiveTab("departed")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px flex items-center gap-1.5
+              ${activeTab === "departed"
+                ? "border-primary text-primary"
+                : "border-transparent text-text-secondary hover:text-text-primary"}`}>
+            已离职
+            {departedMembers.length > 0 && (
+              <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-gray-100 text-gray-600 font-semibold">
+                {departedMembers.length}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* 成员列表 Tab */}
@@ -368,21 +614,52 @@ export default function AdminMembersPage() {
                     <th className="text-left px-3 py-2.5 font-medium text-text-secondary hidden lg:table-cell">工号</th>
                     <th className="text-left px-3 py-2.5 font-medium text-text-secondary">角色</th>
                     <th className="text-left px-3 py-2.5 font-medium text-text-secondary hidden xl:table-cell">加入时间</th>
+                    <th className="text-right px-3 py-2.5 font-medium text-text-secondary w-20">排序</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredMembers.map((m) => {
                     const roleConfig = ROLE_CONFIG[m.role];
                     const isSelected = selectedMember?.user_id === m.user_id;
+                    const isPinned = m.sort_order > 0;
+                    const pinnedIdx = isPinned ? pinnedMembers.indexOf(m) : -1;
                     return (
-                      <tr key={m.user_id} onClick={() => openDetail(m)}
+                      <tr key={m.user_id}
+                        draggable={isPinned}
+                        onDragStart={() => handleDragStart(pinnedIdx)}
+                        onDragOver={(e) => { if (isPinned) handleDragOver(e, pinnedIdx); }}
+                        onDrop={handleDrop}
+                        onClick={() => openDetail(m)}
                         className={`border-b border-panel-border last:border-b-0 cursor-pointer transition-colors
-                          ${isSelected ? "bg-primary/5" : "hover:bg-list-hover"}`}>
+                          ${isSelected ? "bg-primary/5" : isPinned ? "bg-amber-50/40 hover:bg-amber-50/70" : "hover:bg-list-hover"}`}>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
-                            <Avatar name={m.user?.name || ""} avatarUrl={m.user?.avatar_url} size="sm" />
+                            {isPinned && (
+                              <span className="cursor-grab text-text-placeholder hover:text-text-secondary" title="拖拽排序"
+                                onMouseDown={(e) => e.stopPropagation()}>
+                                <GripVertical size={14} />
+                              </span>
+                            )}
+                            <div className="relative">
+                              <Avatar name={m.user?.name || ""} avatarUrl={m.user?.avatar_url} size="sm" />
+                              {m.member_status === "suspended" && (
+                                <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-white flex items-center justify-center">
+                                  <ShieldOff size={7} className="text-white" />
+                                </div>
+                              )}
+                            </div>
                             <div className="min-w-0">
-                              <p className="text-sm font-medium text-text-primary truncate">{m.user?.name}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-sm font-medium text-text-primary truncate">{m.user?.name}</p>
+                                {isPinned && (
+                                  <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-100 text-amber-700">
+                                    <Pin size={8} /> 置顶
+                                  </span>
+                                )}
+                                {m.member_status === "suspended" && (
+                                  <span className="shrink-0 inline-block px-1.5 py-0.5 rounded text-[9px] font-medium bg-red-100 text-red-600">暂停</span>
+                                )}
+                              </div>
                               <p className="text-xs text-text-placeholder truncate">{m.user?.email}</p>
                             </div>
                           </div>
@@ -403,6 +680,19 @@ export default function AdminMembersPage() {
                         </td>
                         <td className="px-3 py-3 hidden xl:table-cell">
                           <span className="text-xs text-text-placeholder">{new Date(m.joined_at).toLocaleDateString("zh-CN")}</span>
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          {m.role !== "owner" && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handlePin(m, !isPinned); }}
+                              title={isPinned ? "取消置顶" : "置顶"}
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors
+                                ${isPinned
+                                  ? "text-amber-600 bg-amber-50 hover:bg-amber-100"
+                                  : "text-text-secondary hover:bg-list-hover hover:text-primary"}`}>
+                              {isPinned ? <><PinOff size={12} /> 取消</> : <><Pin size={12} /> 置顶</>}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -428,6 +718,16 @@ export default function AdminMembersPage() {
             onInvite={() => setShowInviteModal(true)}
           />
         )}
+
+        {/* 已离职 Tab */}
+        {activeTab === "departed" && (
+          <DepartedPanel
+            members={departedMembers}
+            loading={departedLoading}
+            onRestore={handleRestoreDeparted}
+            onDelete={handlePermanentDelete}
+          />
+        )}
       </div>
 
       {/* 右侧：成员详情侧栏 */}
@@ -439,6 +739,7 @@ export default function AdminMembersPage() {
           editing={editing}
           saving={saving}
           departments={departments}
+          employeeTypes={employeeTypes}
           editName={editName} setEditName={setEditName}
           editDept={editDept} setEditDept={setEditDept}
           editTitle={editTitle} setEditTitle={setEditTitle}
@@ -446,10 +747,17 @@ export default function AdminMembersPage() {
           editPhone={editPhone} setEditPhone={setEditPhone}
           editWorkCity={editWorkCity} setEditWorkCity={setEditWorkCity}
           editGender={editGender} setEditGender={setEditGender}
+          editEmployeeType={editEmployeeType} setEditEmployeeType={setEditEmployeeType}
+          editEmail={editEmail} setEditEmail={setEditEmail}
+          editLoginPhone={editLoginPhone} setEditLoginPhone={setEditLoginPhone}
           editRole={editRole} setEditRole={setEditRole}
-          onEdit={() => setEditing(true)}
-          onCancel={() => { setEditing(false); populateForm(selectedMember); }}
+          onEdit={() => { setEditing(true); setSaveError(""); }}
+          onCancel={() => { setEditing(false); setSaveError(""); populateForm(selectedMember); }}
           onSave={handleSave}
+          saveError={saveError}
+          onSuspend={handleSuspendToggle}
+          suspending={suspending}
+          onDepart={() => openDepartModal(selectedMember)}
           onRemove={() => handleRemove(selectedMember)}
           onClose={() => setSelectedMember(null)}
         />
@@ -466,6 +774,24 @@ export default function AdminMembersPage() {
           inviteResult={inviteResult}
           onInvite={handleInvite}
           onClose={() => { setShowInviteModal(false); setInviteResult(null); }}
+        />
+      )}
+
+      {showDepartModal && departTarget && (
+        <DepartModal
+          target={departTarget}
+          members={members}
+          receiverId={departReceiverId}
+          setReceiverId={setDepartReceiverId}
+          transferDocs={transferDocs}
+          setTransferDocs={setTransferDocs}
+          transferEvents={transferEvents}
+          setTransferEvents={setTransferEvents}
+          transferConversations={transferConversations}
+          setTransferConversations={setTransferConversations}
+          departing={departing}
+          onConfirm={handleDepart}
+          onCancel={() => setShowDepartModal(false)}
         />
       )}
     </div>
@@ -676,6 +1002,7 @@ interface DetailPanelProps {
   editing: boolean;
   saving: boolean;
   departments: string[];
+  employeeTypes: EmployeeType[];
   editName: string; setEditName: (v: string) => void;
   editDept: string; setEditDept: (v: string) => void;
   editTitle: string; setEditTitle: (v: string) => void;
@@ -683,21 +1010,30 @@ interface DetailPanelProps {
   editPhone: string; setEditPhone: (v: string) => void;
   editWorkCity: string; setEditWorkCity: (v: string) => void;
   editGender: Gender | ""; setEditGender: (v: Gender | "") => void;
+  editEmployeeType: string; setEditEmployeeType: (v: string) => void;
+  editEmail: string; setEditEmail: (v: string) => void;
+  editLoginPhone: string; setEditLoginPhone: (v: string) => void;
   editRole: OrgMemberRole; setEditRole: (v: OrgMemberRole) => void;
   onEdit: () => void;
   onCancel: () => void;
   onSave: () => void;
+  saveError?: string;
+  onSuspend: () => void;
+  suspending?: boolean;
+  onDepart: () => void;
   onRemove: () => void;
   onClose: () => void;
 }
 
 function MemberDetailPanel({
-  member, isOwner, isSelf, editing, saving, departments,
+  member, isOwner, isSelf, editing, saving, departments, employeeTypes,
   editName, setEditName, editDept, setEditDept,
   editTitle, setEditTitle, editEmployeeId, setEditEmployeeId,
   editPhone, setEditPhone, editWorkCity, setEditWorkCity,
-  editGender, setEditGender, editRole, setEditRole,
-  onEdit, onCancel, onSave, onRemove, onClose,
+  editGender, setEditGender, editEmployeeType, setEditEmployeeType,
+  editEmail, setEditEmail, editLoginPhone, setEditLoginPhone,
+  editRole, setEditRole,
+  onEdit, onCancel, onSave, saveError, onSuspend, suspending, onDepart, onRemove, onClose,
 }: DetailPanelProps) {
   const roleConfig = ROLE_CONFIG[member.role];
   return (
@@ -731,11 +1067,15 @@ function MemberDetailPanel({
           )}
           <div className="flex items-center justify-center gap-2 mt-2">
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${roleConfig.badge}`}>{roleConfig.label}</span>
-            {member.user?.status === "online" && (
+            {member.member_status === "suspended" ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-600">
+                <ShieldOff size={10} /> 暂停使用
+              </span>
+            ) : member.user?.status === "online" ? (
               <span className="inline-flex items-center gap-1 text-xs text-green-600">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> 在线
               </span>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -772,6 +1112,17 @@ function MemberDetailPanel({
         <div className="px-5 py-4 border-b border-panel-border">
           <h5 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3">工作信息</h5>
           <div className="space-y-3">
+            {editing ? (
+              <EditRow icon={<Tag size={14} />} label="人员类型">
+                <select value={editEmployeeType} onChange={(e) => setEditEmployeeType(e.target.value)}
+                  className="flex-1 h-8 px-2 rounded-md border border-panel-border text-xs bg-bg-page outline-none">
+                  <option value="">未设置</option>
+                  {employeeTypes.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
+                </select>
+              </EditRow>
+            ) : (
+              <InfoRow icon={<Tag size={14} />} label="人员类型" value={member.employee_type || "未设置"} />
+            )}
             {editing ? (
               <EditRow icon={<Building2 size={14} />} label="部门">
                 <select value={editDept} onChange={(e) => setEditDept(e.target.value)}
@@ -820,34 +1171,80 @@ function MemberDetailPanel({
             )}
           </div>
         </div>
+
+        {/* 登录方式 */}
+        <div className="px-5 py-4 border-b border-panel-border">
+          <h5 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <KeyRound size={12} /> 登录方式
+          </h5>
+          <div className="space-y-3">
+            {editing ? (
+              <EditRow icon={<Mail size={14} />} label="登录邮箱">
+                <input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="登录邮箱"
+                  type="email"
+                  className="flex-1 h-8 px-2 rounded-md border border-panel-border text-xs bg-bg-page outline-none" />
+              </EditRow>
+            ) : (
+              <InfoRow icon={<Mail size={14} />} label="登录邮箱" value={member.user?.email || ""} />
+            )}
+            {editing ? (
+              <EditRow icon={<Smartphone size={14} />} label="登录手机">
+                <input value={editLoginPhone} onChange={(e) => setEditLoginPhone(e.target.value)} placeholder="手机号码（选填）"
+                  type="tel"
+                  className="flex-1 h-8 px-2 rounded-md border border-panel-border text-xs bg-bg-page outline-none" />
+              </EditRow>
+            ) : (
+              <InfoRow icon={<Smartphone size={14} />} label="登录手机" value={member.user?.login_phone || "未绑定"} />
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="px-4 py-3 border-t border-panel-border shrink-0">
         {editing ? (
-          <div className="flex gap-2">
-            <button onClick={onCancel}
-              className="flex-1 h-8 rounded-lg border border-panel-border text-sm text-text-secondary hover:bg-list-hover transition-colors">
-              取消
-            </button>
-            <button onClick={onSave} disabled={saving || !editName.trim()}
-              className="flex-1 h-8 rounded-lg bg-primary text-white text-sm font-medium
-                hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-1">
-              {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-              保存
-            </button>
+          <div className="space-y-2">
+            {saveError && (
+              <p className="text-xs text-red-500 text-center">{saveError}</p>
+            )}
+            <div className="flex gap-2">
+              <button onClick={onCancel}
+                className="flex-1 h-8 rounded-lg border border-panel-border text-sm text-text-secondary hover:bg-list-hover transition-colors">
+                取消
+              </button>
+              <button onClick={onSave} disabled={saving || !editName.trim()}
+                className="flex-1 h-8 rounded-lg bg-primary text-white text-sm font-medium
+                  hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-1">
+                {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                保存
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="flex gap-2">
-            <button onClick={onEdit}
-              className="flex-1 h-8 rounded-lg bg-primary text-white text-sm font-medium
-                hover:bg-primary/90 transition-colors flex items-center justify-center gap-1">
-              <Pencil size={13} /> 编辑信息
-            </button>
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <button onClick={onEdit}
+                className="flex-1 h-8 rounded-lg bg-primary text-white text-sm font-medium
+                  hover:bg-primary/90 transition-colors flex items-center justify-center gap-1">
+                <Pencil size={13} /> 编辑信息
+              </button>
+              {!isOwner && !isSelf && (
+                <button onClick={onDepart}
+                  className="h-8 px-3 rounded-lg border border-red-200 text-sm text-red-500
+                    hover:bg-red-50 transition-colors flex items-center gap-1">
+                  <LogOut size={13} /> 离职
+                </button>
+              )}
+            </div>
             {!isOwner && !isSelf && (
-              <button onClick={onRemove}
-                className="h-8 px-3 rounded-lg border border-red-200 text-sm text-red-500
-                  hover:bg-red-50 transition-colors flex items-center gap-1">
-                <Trash2 size={13} /> 移除
+              <button onClick={onSuspend} disabled={suspending}
+                className={`w-full h-8 rounded-lg border text-sm font-medium transition-colors flex items-center justify-center gap-1
+                  ${member.member_status === 'suspended'
+                    ? 'border-green-200 text-green-600 hover:bg-green-50'
+                    : 'border-amber-200 text-amber-600 hover:bg-amber-50'
+                  } disabled:opacity-50`}>
+                {suspending ? <Loader2 size={13} className="animate-spin" /> :
+                  member.member_status === 'suspended' ? <><Play size={13} /> 恢复账号</> : <><Pause size={13} /> 暂停账号</>
+                }
               </button>
             )}
           </div>
@@ -874,6 +1271,208 @@ function EditRow({ icon, label, children }: { icon: React.ReactNode; label: stri
       <span className="text-text-placeholder shrink-0">{icon}</span>
       <span className="text-text-secondary w-14 shrink-0">{label}</span>
       {children}
+    </div>
+  );
+}
+
+/* ========== 已离职成员列表 ========== */
+function DepartedPanel({
+  members, loading, onRestore, onDelete,
+}: {
+  members: MemberWithUser[];
+  loading: boolean;
+  onRestore: (m: MemberWithUser) => void;
+  onDelete: (m: MemberWithUser) => void;
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 size={24} className="animate-spin text-text-placeholder" />
+      </div>
+    );
+  }
+
+  if (members.length === 0) {
+    return (
+      <div className="bg-panel-bg rounded-xl border border-panel-border p-12 text-center">
+        <UserX size={36} className="mx-auto mb-3 text-text-placeholder opacity-40" />
+        <p className="text-sm text-text-secondary">暂无已离职成员</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-panel-bg rounded-xl border border-panel-border overflow-hidden">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-panel-border bg-bg-page/50">
+            <th className="text-left px-4 py-2.5 font-medium text-text-secondary">成员</th>
+            <th className="text-left px-3 py-2.5 font-medium text-text-secondary hidden md:table-cell">部门</th>
+            <th className="text-left px-3 py-2.5 font-medium text-text-secondary hidden lg:table-cell">离职日期</th>
+            <th className="text-left px-3 py-2.5 font-medium text-text-secondary hidden lg:table-cell">资源接收人</th>
+            <th className="text-right px-4 py-2.5 font-medium text-text-secondary">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {members.map((m) => {
+            const canRestore = m.departed_at
+              ? (Date.now() - new Date(m.departed_at).getTime()) / (1000 * 60 * 60 * 24) <= 30
+              : false;
+
+            return (
+              <tr key={m.user_id} className="border-b border-panel-border last:border-b-0">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="relative opacity-60">
+                      <Avatar name={m.user?.name || ""} avatarUrl={m.user?.avatar_url} size="sm" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-medium text-text-secondary truncate">{m.user?.name}</p>
+                        <span className="shrink-0 inline-block px-1.5 py-0.5 rounded text-[9px] font-medium bg-gray-100 text-gray-500">已离职</span>
+                      </div>
+                      <p className="text-xs text-text-placeholder truncate">{m.user?.email}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-3 py-3 hidden md:table-cell">
+                  <span className="text-sm text-text-secondary">{m.department || "—"}</span>
+                </td>
+                <td className="px-3 py-3 hidden lg:table-cell">
+                  <span className="text-xs text-text-placeholder">
+                    {m.departed_at ? new Date(m.departed_at).toLocaleDateString("zh-CN") : "—"}
+                  </span>
+                </td>
+                <td className="px-3 py-3 hidden lg:table-cell">
+                  <span className="text-xs text-text-placeholder">
+                    {m.receiver?.name || "未转移"}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-1.5">
+                    {canRestore && (
+                      <button onClick={() => onRestore(m)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs text-green-600 bg-green-50 rounded hover:bg-green-100 transition-colors">
+                        <RotateCcw size={11} /> 恢复
+                      </button>
+                    )}
+                    <button onClick={() => onDelete(m)}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-500 bg-red-50 rounded hover:bg-red-100 transition-colors">
+                      <Trash2 size={11} /> 删除
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ========== 离职确认弹窗 ========== */
+function DepartModal({
+  target, members, receiverId, setReceiverId,
+  transferDocs, setTransferDocs,
+  transferEvents, setTransferEvents,
+  transferConversations, setTransferConversations,
+  departing, onConfirm, onCancel,
+}: {
+  target: MemberWithUser;
+  members: MemberWithUser[];
+  receiverId: string; setReceiverId: (v: string) => void;
+  transferDocs: boolean; setTransferDocs: (v: boolean) => void;
+  transferEvents: boolean; setTransferEvents: (v: boolean) => void;
+  transferConversations: boolean; setTransferConversations: (v: boolean) => void;
+  departing: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const availableReceivers = members.filter(
+    (m) => m.user_id !== target.user_id && m.member_status !== 'departed'
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onCancel}>
+      <div className="bg-bg-panel rounded-2xl shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-panel-border flex items-center justify-between">
+          <h3 className="text-base font-semibold text-text-primary flex items-center gap-2">
+            <LogOut size={18} className="text-red-500" /> 操作离职
+          </h3>
+          <button onClick={onCancel} className="w-7 h-7 rounded-md flex items-center justify-center text-text-placeholder hover:bg-list-hover">
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {/* 离职成员信息 */}
+          <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg border border-red-100">
+            <Avatar name={target.user?.name || ""} avatarUrl={target.user?.avatar_url} size="sm" />
+            <div>
+              <p className="text-sm font-medium text-text-primary">{target.user?.name}</p>
+              <p className="text-xs text-text-placeholder">{target.user?.email}</p>
+            </div>
+          </div>
+
+          {/* 资源接收人 */}
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-2">资源接收人</label>
+            <select value={receiverId} onChange={(e) => setReceiverId(e.target.value)}
+              className="w-full h-9 px-3 rounded-lg border border-panel-border text-sm bg-bg-page outline-none focus:ring-2 focus:ring-primary/30">
+              <option value="">不转移资源（保留在成员名下）</option>
+              {availableReceivers.map((m) => (
+                <option key={m.user_id} value={m.user_id}>{m.user?.name}（{m.user?.email}）</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 资源转移选项 */}
+          {receiverId && (
+            <div>
+              <label className="block text-sm font-medium text-text-primary mb-2">选择要转移的资源</label>
+              <div className="space-y-2.5">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={transferDocs} onChange={(e) => setTransferDocs(e.target.checked)}
+                    className="rounded border-panel-border text-primary" />
+                  <span className="text-sm text-text-secondary">云文档 — 转移该成员创建的所有文档</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={transferEvents} onChange={(e) => setTransferEvents(e.target.checked)}
+                    className="rounded border-panel-border text-primary" />
+                  <span className="text-sm text-text-secondary">未来日程 — 转移该成员创建的未来日程</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={transferConversations} onChange={(e) => setTransferConversations(e.target.checked)}
+                    className="rounded border-panel-border text-primary" />
+                  <span className="text-sm text-text-secondary">群聊 — 转移该成员创建的群聊管理权</span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* 风险提示 */}
+          <div className="p-3 bg-amber-50 rounded-lg border border-amber-100 text-xs text-amber-700 space-y-1">
+            <p className="font-semibold">⚠️ 注意</p>
+            <p>• 操作离职后，该成员将无法访问本企业</p>
+            <p>• 资源转移后不可撤销，请谨慎操作</p>
+            <p>• 离职 30 天内可恢复成员，但已转移资源无法恢复</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t border-panel-border flex gap-3">
+          <button onClick={onCancel}
+            className="flex-1 h-9 rounded-lg border border-panel-border text-sm text-text-secondary hover:bg-list-hover transition-colors">
+            取消
+          </button>
+          <button onClick={onConfirm} disabled={departing}
+            className="flex-1 h-9 rounded-lg bg-red-500 text-white text-sm font-medium
+              hover:bg-red-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-1">
+            {departing ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
+            确认离职
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

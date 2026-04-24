@@ -1,6 +1,6 @@
 /**
  * 管理后台 - 部门管理页面
- * 树状结构 CRUD
+ * 树状结构 CRUD + 部门负责人设置
  * @author skylark
  */
 
@@ -9,10 +9,13 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Loader2, Plus, Pencil, Trash2, Building2, X, Check,
-  ChevronRight, ChevronDown, FolderPlus,
+  ChevronRight, ChevronDown, FolderPlus, Crown,
 } from "lucide-react";
+import Avatar from "@/components/ui/Avatar";
 import { useOrg } from "@/lib/org-context";
-import type { Department } from "@/lib/types";
+import type { Department, User } from "@/lib/types";
+
+type MemberOption = { user_id: string; user?: User };
 
 /** 将扁平列表构建为树 */
 function buildTree(list: Department[]): Department[] {
@@ -40,14 +43,17 @@ function DeptNode({
   expanded,
   editingId,
   editName,
+  editLeaderId,
   submitting,
   creatingParentId,
   newChildName,
+  members,
   onToggle,
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
   onEditNameChange,
+  onEditLeaderChange,
   onDelete,
   onStartCreateChild,
   onCancelCreateChild,
@@ -59,14 +65,17 @@ function DeptNode({
   expanded: Set<string>;
   editingId: string | null;
   editName: string;
+  editLeaderId: string;
   submitting: boolean;
   creatingParentId: string | null;
   newChildName: string;
+  members: MemberOption[];
   onToggle: (id: string) => void;
-  onStartEdit: (id: string, name: string) => void;
+  onStartEdit: (id: string, name: string, leaderId: string) => void;
   onCancelEdit: () => void;
   onSaveEdit: (id: string) => void;
   onEditNameChange: (v: string) => void;
+  onEditLeaderChange: (v: string) => void;
   onDelete: (dept: Department) => void;
   onStartCreateChild: (parentId: string) => void;
   onCancelCreateChild: () => void;
@@ -100,13 +109,26 @@ function DeptNode({
 
         {isEditing ? (
           <>
-            <input
-              autoFocus
-              value={editName}
-              onChange={(e) => onEditNameChange(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") onSaveEdit(dept.id); if (e.key === "Escape") onCancelEdit(); }}
-              className="flex-1 text-sm bg-transparent border-b border-primary outline-none py-0.5 text-text-primary"
-            />
+            <div className="flex-1 flex items-center gap-2">
+              <input
+                autoFocus
+                value={editName}
+                onChange={(e) => onEditNameChange(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") onSaveEdit(dept.id); if (e.key === "Escape") onCancelEdit(); }}
+                className="flex-1 text-sm bg-transparent border-b border-primary outline-none py-0.5 text-text-primary"
+                placeholder="部门名称"
+              />
+              <select
+                value={editLeaderId}
+                onChange={(e) => onEditLeaderChange(e.target.value)}
+                className="h-7 px-2 rounded border border-panel-border text-xs bg-bg-page outline-none max-w-40"
+              >
+                <option value="">无负责人</option>
+                {members.map((m) => (
+                  <option key={m.user_id} value={m.user_id}>{m.user?.name}</option>
+                ))}
+              </select>
+            </div>
             <button
               onClick={() => onSaveEdit(dept.id)}
               disabled={submitting || !editName.trim()}
@@ -120,9 +142,15 @@ function DeptNode({
           </>
         ) : (
           <>
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 flex items-center gap-2">
               <span className="text-sm font-medium text-text-primary">{dept.name}</span>
-              <span className="text-xs text-text-placeholder ml-2">{dept.member_count ?? 0} 人</span>
+              <span className="text-xs text-text-placeholder">{dept.member_count ?? 0} 人</span>
+              {dept.leader && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-medium">
+                  <Crown size={9} />
+                  {dept.leader.name}
+                </span>
+              )}
             </div>
             {/* 操作按钮 - hover 显示 */}
             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -134,7 +162,7 @@ function DeptNode({
                 <FolderPlus size={14} />
               </button>
               <button
-                onClick={() => onStartEdit(dept.id, dept.name)}
+                onClick={() => onStartEdit(dept.id, dept.name, dept.leader_id || "")}
                 className="p-1 rounded text-text-placeholder hover:text-primary hover:bg-primary/10 transition-colors"
                 title="编辑"
               >
@@ -190,14 +218,17 @@ function DeptNode({
           expanded={expanded}
           editingId={editingId}
           editName={editName}
+          editLeaderId={editLeaderId}
           submitting={submitting}
           creatingParentId={creatingParentId}
           newChildName={newChildName}
+          members={members}
           onToggle={onToggle}
           onStartEdit={onStartEdit}
           onCancelEdit={onCancelEdit}
           onSaveEdit={onSaveEdit}
           onEditNameChange={onEditNameChange}
+          onEditLeaderChange={onEditLeaderChange}
           onDelete={onDelete}
           onStartCreateChild={onStartCreateChild}
           onCancelCreateChild={onCancelCreateChild}
@@ -227,9 +258,13 @@ export default function AdminDepartments() {
   /* 编辑 */
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [editLeaderId, setEditLeaderId] = useState("");
 
   /* 展开状态 */
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  /* 成员列表（供选择负责人） */
+  const [members, setMembers] = useState<MemberOption[]>([]);
 
   const fetchDepartments = useCallback(() => {
     if (!currentOrg) { setLoading(false); return; }
@@ -248,6 +283,15 @@ export default function AdminDepartments() {
   }, [currentOrg]);
 
   useEffect(() => { fetchDepartments(); }, [fetchDepartments]);
+
+  /** 加载成员列表（供选择负责人） */
+  useEffect(() => {
+    if (!currentOrg) return;
+    fetch(`/api/admin/members?org_id=${currentOrg.id}`)
+      .then((r) => r.json() as Promise<{ success: boolean; data?: MemberOption[] }>)
+      .then((json) => { if (json.success && json.data) setMembers(json.data); })
+      .catch(() => {});
+  }, [currentOrg]);
 
   const toggleExpand = (id: string) => {
     setExpanded((prev) => {
@@ -289,14 +333,17 @@ export default function AdminDepartments() {
     fetchDepartments();
   };
 
-  /** 编辑部门名称 */
+  /** 编辑部门 */
   const handleUpdate = async (deptId: string) => {
     if (!currentOrg || !editName.trim()) return;
     setSubmitting(true);
     await fetch("/api/admin/departments", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ org_id: currentOrg.id, dept_id: deptId, name: editName.trim() }),
+      body: JSON.stringify({
+        org_id: currentOrg.id, dept_id: deptId,
+        name: editName.trim(), leader_id: editLeaderId || null,
+      }),
     });
     setEditingId(null);
     setSubmitting(false);
@@ -383,14 +430,17 @@ export default function AdminDepartments() {
               expanded={expanded}
               editingId={editingId}
               editName={editName}
+              editLeaderId={editLeaderId}
               submitting={submitting}
               creatingParentId={creatingParentId}
               newChildName={newChildName}
+              members={members}
               onToggle={toggleExpand}
-              onStartEdit={(id, name) => { setEditingId(id); setEditName(name); }}
+              onStartEdit={(id, name, leaderId) => { setEditingId(id); setEditName(name); setEditLeaderId(leaderId); }}
               onCancelEdit={() => setEditingId(null)}
               onSaveEdit={handleUpdate}
               onEditNameChange={setEditName}
+              onEditLeaderChange={setEditLeaderId}
               onDelete={handleDelete}
               onStartCreateChild={(parentId) => { setCreatingParentId(parentId); setNewChildName(""); setShowCreate(false); }}
               onCancelCreateChild={() => { setCreatingParentId(null); setNewChildName(""); }}

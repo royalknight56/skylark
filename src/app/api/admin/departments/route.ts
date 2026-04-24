@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     const userId = await getRequestUserId();
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
-    const body = (await request.json()) as { org_id: string; name: string; parent_id?: string };
+    const body = (await request.json()) as { org_id: string; name: string; parent_id?: string; leader_id?: string };
     if (!body.org_id || !body.name) {
       return NextResponse.json({ success: false, error: "参数不完整" }, { status: 400 });
     }
@@ -45,7 +45,10 @@ export async function POST(request: NextRequest) {
     if (!role) return NextResponse.json({ success: false, error: "无管理权限" }, { status: 403 });
 
     const id = `dept-${Date.now().toString(36)}`;
-    const dept = await createDepartment(env.DB, { id, org_id: body.org_id, name: body.name, parent_id: body.parent_id });
+    const dept = await createDepartment(env.DB, {
+      id, org_id: body.org_id, name: body.name,
+      parent_id: body.parent_id, leader_id: body.leader_id,
+    });
 
     await createAdminLog(env.DB, {
       id: `log-${Date.now().toString(36)}`,
@@ -69,7 +72,7 @@ export async function PUT(request: NextRequest) {
     const userId = await getRequestUserId();
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
-    const body = (await request.json()) as { org_id: string; dept_id: string; name: string };
+    const body = (await request.json()) as { org_id: string; dept_id: string; name: string; leader_id?: string | null };
     if (!body.org_id || !body.dept_id || !body.name) {
       return NextResponse.json({ success: false, error: "参数不完整" }, { status: 400 });
     }
@@ -78,7 +81,12 @@ export async function PUT(request: NextRequest) {
     const role = await requireOwner(env.DB, body.org_id, userId);
     if (!role) return NextResponse.json({ success: false, error: "无管理权限" }, { status: 403 });
 
-    await updateDepartment(env.DB, body.dept_id, body.name);
+    await updateDepartment(env.DB, body.dept_id, body.name, body.leader_id);
+
+    const changes: string[] = [`部门更名为「${body.name}」`];
+    if (body.leader_id !== undefined) {
+      changes.push(body.leader_id ? '设置负责人' : '清除负责人');
+    }
 
     await createAdminLog(env.DB, {
       id: `log-${Date.now().toString(36)}`,
@@ -87,7 +95,7 @@ export async function PUT(request: NextRequest) {
       action: "update_department",
       target_type: "department",
       target_id: body.dept_id,
-      detail: `部门更名为「${body.name}」`,
+      detail: changes.join('；'),
     });
 
     return NextResponse.json({ success: true });

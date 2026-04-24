@@ -18,9 +18,12 @@ export interface Organization {
   created_at: string;
   /** 前端展示用 */
   member_count?: number;
+  /** 当前用户在该企业中的成员状态 */
+  member_status?: MemberStatus;
 }
 
 export type Gender = 'male' | 'female' | 'unknown';
+export type MemberStatus = 'active' | 'suspended' | 'departed';
 
 export interface OrgMember {
   org_id: string;
@@ -32,8 +35,28 @@ export interface OrgMember {
   phone: string | null;
   work_city: string | null;
   gender: Gender | null;
+  employee_type: string | null;
+  member_status: MemberStatus;
+  suspended_at: string | null;
+  departed_at: string | null;
+  resource_receiver_id: string | null;
+  sort_order: number;
   joined_at: string;
   user?: User;
+  /** 资源接收人（前端展示用） */
+  receiver?: User;
+}
+
+/** 人员类型选项 */
+export interface EmployeeType {
+  id: string;
+  org_id: string;
+  name: string;
+  is_builtin: boolean;
+  is_active: boolean;
+  is_default: boolean;
+  sort_order: number;
+  created_at: string;
 }
 
 export type InviteStatus = 'pending' | 'accepted' | 'expired';
@@ -58,6 +81,7 @@ export interface User {
   email: string;
   name: string;
   avatar_url: string | null;
+  login_phone?: string | null;
   status: 'online' | 'offline' | 'busy' | 'away';
   current_org_id: string | null;
   created_at: string;
@@ -214,9 +238,12 @@ export interface Department {
   org_id: string;
   name: string;
   parent_id: string | null;
+  leader_id: string | null;
   created_at: string;
   /** 前端展示用 */
   member_count?: number;
+  /** 部门负责人信息 */
+  leader?: User;
   /** 前端树状结构用 */
   children?: Department[];
 }
