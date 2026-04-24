@@ -1,6 +1,6 @@
 /**
  * 创建群聊弹窗
- * 从联系人列表多选成员，输入群名后创建群组会话
+ * 从企业成员列表多选成员，输入群名后创建群组会话
  * @author skylark
  */
 
@@ -18,11 +18,7 @@ import {
 import Avatar from "@/components/ui/Avatar";
 import { useOrg } from "@/lib/org-context";
 import { useAuth } from "@/lib/auth-context";
-import type { User, Contact } from "@/lib/types";
-
-interface ContactRow extends Contact {
-  contact: User;
-}
+import type { User, OrgMember } from "@/lib/types";
 
 interface CreateGroupModalProps {
   open: boolean;
@@ -39,62 +35,52 @@ export default function CreateGroupModal({
   const { currentOrg } = useOrg();
   const { user } = useAuth();
 
-  const [contacts, setContacts] = useState<User[]>([]);
-  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [members, setMembers] = useState<(OrgMember & { user: User })[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [groupName, setGroupName] = useState("");
   const [searchText, setSearchText] = useState("");
   const [creating, setCreating] = useState(false);
 
-  /** 加载联系人列表 */
-  const fetchContacts = useCallback(async () => {
+  /** 加载企业全部成员（排除自己） */
+  const fetchMembers = useCallback(async () => {
     if (!currentOrg) return;
-    setLoadingContacts(true);
+    setLoadingMembers(true);
     try {
-      const res = await fetch(`/api/contacts?org_id=${currentOrg.id}`);
+      const res = await fetch(`/api/orgs/${currentOrg.id}/members`);
       const json = (await res.json()) as {
         success: boolean;
-        data?: ContactRow[];
+        data?: (OrgMember & { user: User })[];
       };
       if (json.success && json.data) {
-        const users = json.data.map((row) => row.contact);
-        // 去重
-        const seen = new Set<string>();
-        const unique: User[] = [];
-        for (const u of users) {
-          if (!seen.has(u.id)) {
-            seen.add(u.id);
-            unique.push(u);
-          }
-        }
-        setContacts(unique);
+        setMembers(json.data.filter((m) => m.user_id !== user?.id));
       }
     } catch {
       /* ignore */
     } finally {
-      setLoadingContacts(false);
+      setLoadingMembers(false);
     }
-  }, [currentOrg]);
+  }, [currentOrg, user?.id]);
 
   useEffect(() => {
     if (open) {
       setSelected(new Set());
       setGroupName("");
       setSearchText("");
-      fetchContacts();
+      fetchMembers();
     }
-  }, [open, fetchContacts]);
+  }, [open, fetchMembers]);
 
-  /** 过滤联系人 */
-  const filteredContacts = useMemo(() => {
-    if (!searchText.trim()) return contacts;
+  /** 过滤成员 */
+  const filteredMembers = useMemo(() => {
+    if (!searchText.trim()) return members;
     const q = searchText.toLowerCase();
-    return contacts.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        c.email.toLowerCase().includes(q)
+    return members.filter(
+      (m) =>
+        m.user.name.toLowerCase().includes(q) ||
+        m.user.email.toLowerCase().includes(q)
     );
-  }, [contacts, searchText]);
+  }, [members, searchText]);
 
   /** 切换选中 */
   const toggleSelect = (userId: string) => {
@@ -117,8 +103,8 @@ export default function CreateGroupModal({
 
   /** 获取已选用户信息 */
   const selectedUsers = useMemo(
-    () => contacts.filter((c) => selected.has(c.id)),
-    [contacts, selected]
+    () => members.filter((m) => selected.has(m.user_id)).map((m) => m.user),
+    [members, selected]
   );
 
   /** 自动生成默认群名 */
@@ -234,7 +220,7 @@ export default function CreateGroupModal({
               type="text"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
-              placeholder="搜索联系人…"
+              placeholder="搜索企业成员…"
               className="w-full h-9 pl-9 pr-3 rounded-lg bg-bg-page border border-panel-border text-sm
                 text-text-primary placeholder:text-text-placeholder
                 focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -242,28 +228,27 @@ export default function CreateGroupModal({
           </div>
         </div>
 
-        {/* 联系人列表 */}
+        {/* 成员列表 */}
         <div className="flex-1 overflow-y-auto px-2 pb-2 min-h-0">
-          {loadingContacts ? (
+          {loadingMembers ? (
             <div className="flex items-center justify-center py-10">
               <Loader2 size={20} className="text-primary animate-spin" />
             </div>
-          ) : filteredContacts.length === 0 ? (
+          ) : filteredMembers.length === 0 ? (
             <div className="flex flex-col items-center py-10 text-text-placeholder text-sm">
               <Users size={28} className="mb-2 opacity-40" />
-              <p>{contacts.length === 0 ? "暂无联系人" : "未找到匹配的联系人"}</p>
+              <p>{members.length === 0 ? "企业内暂无其他成员" : "未找到匹配的成员"}</p>
             </div>
           ) : (
-            filteredContacts.map((contact) => {
-              const isSelected = selected.has(contact.id);
+            filteredMembers.map((member) => {
+              const isSelected = selected.has(member.user_id);
               return (
                 <button
-                  key={contact.id}
-                  onClick={() => toggleSelect(contact.id)}
+                  key={member.user_id}
+                  onClick={() => toggleSelect(member.user_id)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left
                     ${isSelected ? "bg-primary/5" : "hover:bg-list-hover"}`}
                 >
-                  {/* 选择框 */}
                   <div
                     className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors
                       ${
@@ -275,16 +260,16 @@ export default function CreateGroupModal({
                     {isSelected && <Check size={12} className="text-white" />}
                   </div>
                   <Avatar
-                    name={contact.name}
-                    avatarUrl={contact.avatar_url}
+                    name={member.user.name}
+                    avatarUrl={member.user.avatar_url}
                     size="sm"
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-text-primary truncate">
-                      {contact.name}
+                      {member.user.name}
                     </p>
                     <p className="text-xs text-text-placeholder truncate">
-                      {contact.email}
+                      {member.user.email}
                     </p>
                   </div>
                 </button>
@@ -296,7 +281,7 @@ export default function CreateGroupModal({
         {/* 底部操作栏 */}
         <div className="px-5 py-3 border-t border-panel-border flex items-center justify-between shrink-0">
           <p className="text-xs text-text-placeholder">
-            至少选择 1 位联系人
+            至少选择 1 位成员
           </p>
           <div className="flex items-center gap-2">
             <button

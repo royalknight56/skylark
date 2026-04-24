@@ -288,6 +288,120 @@ export interface BotWebhookEvent {
   };
 }
 
+/* ==================== 多维表格相关 ==================== */
+
+/** 多维表格（相当于一个独立的数据库/应用） */
+export interface Base {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string | null;
+  icon: string;
+  creator_id: string;
+  created_at: string;
+  updated_at: string;
+  creator?: User;
+  /** 数据表数量（前端展示用） */
+  table_count?: number;
+}
+
+/** 数据表（base 下的一张表） */
+export interface BaseTable {
+  id: string;
+  base_id: string;
+  name: string;
+  position: number;
+  created_at: string;
+}
+
+/** 字段类型枚举 */
+export type BaseFieldType =
+  | 'text' | 'number' | 'date' | 'checkbox'
+  | 'select' | 'multi_select'
+  | 'url' | 'email' | 'phone'
+  | 'rating' | 'progress' | 'member'
+  | 'created_at' | 'updated_at';
+
+/** 单选 / 多选的选项 */
+export interface SelectOption {
+  id: string;
+  name: string;
+  color: string;
+}
+
+/** 字段配置（存储在 options JSON 列中） */
+export interface BaseFieldOptions {
+  /** select / multi_select 的选项列表 */
+  choices?: SelectOption[];
+  /** number 的精度 */
+  precision?: number;
+  /** date 的格式 */
+  dateFormat?: string;
+  /** rating 的最大值 */
+  maxRating?: number;
+}
+
+/** 字段（列定义） */
+export interface BaseField {
+  id: string;
+  table_id: string;
+  name: string;
+  type: BaseFieldType;
+  options: BaseFieldOptions | null;
+  is_primary: boolean;
+  position: number;
+  created_at: string;
+}
+
+/** 记录（行数据） */
+export interface BaseRecord {
+  id: string;
+  table_id: string;
+  data: Record<string, unknown>;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 视图类型 */
+export type BaseViewType = 'grid' | 'kanban' | 'form';
+
+/** 筛选条件 */
+export interface ViewFilter {
+  field_id: string;
+  operator: 'eq' | 'neq' | 'contains' | 'not_contains' | 'gt' | 'lt' | 'gte' | 'lte' | 'is_empty' | 'is_not_empty';
+  value: unknown;
+}
+
+/** 排序条件 */
+export interface ViewSort {
+  field_id: string;
+  direction: 'asc' | 'desc';
+}
+
+/** 视图配置 */
+export interface BaseViewConfig {
+  filters?: ViewFilter[];
+  sorts?: ViewSort[];
+  hidden_fields?: string[];
+  field_widths?: Record<string, number>;
+  /** 看板视图的分组字段 ID */
+  kanban_field_id?: string;
+  /** 表单视图的字段顺序和描述 */
+  form_fields?: { field_id: string; required?: boolean; description?: string }[];
+}
+
+/** 视图 */
+export interface BaseView {
+  id: string;
+  table_id: string;
+  name: string;
+  type: BaseViewType;
+  config: BaseViewConfig;
+  position: number;
+  created_at: string;
+}
+
 /* ==================== API 响应 ==================== */
 
 export interface ApiResponse<T = unknown> {

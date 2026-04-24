@@ -20,6 +20,7 @@ import {
   Check,
   Loader2,
   Shield,
+  Table2,
 } from "lucide-react";
 import { useOrg } from "@/lib/org-context";
 import { useAuth } from "@/lib/auth-context";
@@ -32,6 +33,7 @@ const navItems = [
   { icon: MessageSquare, label: "消息", href: "/messages" },
   { icon: Users, label: "通讯录", href: "/contacts" },
   { icon: FileText, label: "云文档", href: "/docs" },
+  { icon: Table2, label: "多维表格", href: "/bases" },
   { icon: LayoutGrid, label: "工作台", href: "/workspace" },
 ];
 

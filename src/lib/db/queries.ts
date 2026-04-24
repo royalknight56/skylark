@@ -21,6 +21,13 @@ import type {
   OrgMemberRole,
   Bot,
   BotSubscription,
+  Base,
+  BaseTable,
+  BaseField,
+  BaseFieldOptions,
+  BaseRecord,
+  BaseView,
+  BaseViewConfig,
 } from '../types';
 
 /* ==================== 企业/组织查询 ==================== */
@@ -1258,4 +1265,324 @@ export async function createBotMessage(
       created_at: '',
     },
   };
+}
+
+/* ==================== 多维表格查询 ==================== */
+
+/** 生成短 ID */
+function baseId(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/** 获取企业下所有多维表格 */
+export async function getBases(db: D1Database, orgId: string): Promise<Base[]> {
+  const result = await db
+    .prepare(
+      `SELECT b.*, u.name AS creator_name, u.avatar_url AS creator_avatar,
+              (SELECT COUNT(*) FROM base_tables WHERE base_id = b.id) AS table_count
+       FROM bases b
+       LEFT JOIN users u ON b.creator_id = u.id
+       WHERE b.org_id = ?
+       ORDER BY b.updated_at DESC`
+    )
+    .bind(orgId)
+    .all<Base & { creator_name: string; creator_avatar: string | null; table_count: number }>();
+
+  return result.results.map((row) => ({
+    ...row,
+    creator: { id: row.creator_id, name: row.creator_name, avatar_url: row.creator_avatar, email: '', status: 'offline' as const, current_org_id: null, created_at: '' },
+  }));
+}
+
+/** 获取单个多维表格 */
+export async function getBase(db: D1Database, baseId: string): Promise<Base | null> {
+  const row = await db
+    .prepare(
+      `SELECT b.*, u.name AS creator_name, u.avatar_url AS creator_avatar,
+              (SELECT COUNT(*) FROM base_tables WHERE base_id = b.id) AS table_count
+       FROM bases b LEFT JOIN users u ON b.creator_id = u.id
+       WHERE b.id = ?`
+    )
+    .bind(baseId)
+    .first<Base & { creator_name: string; creator_avatar: string | null; table_count: number }>();
+
+  if (!row) return null;
+  return {
+    ...row,
+    creator: { id: row.creator_id, name: row.creator_name, avatar_url: row.creator_avatar, email: '', status: 'offline' as const, current_org_id: null, created_at: '' },
+  };
+}
+
+/** 创建多维表格（自动创建默认数据表和字段） */
+export async function createBase(
+  db: D1Database,
+  orgId: string,
+  creatorId: string,
+  name: string,
+  description?: string
+): Promise<Base> {
+  const id = baseId('base');
+  const tableId = baseId('tbl');
+  const fieldId = baseId('fld');
+  const viewId = baseId('viw');
+
+  const batch = [
+    db.prepare('INSERT INTO bases (id, org_id, name, description, creator_id) VALUES (?, ?, ?, ?, ?)')
+      .bind(id, orgId, name, description || null, creatorId),
+    db.prepare('INSERT INTO base_tables (id, base_id, name, position) VALUES (?, ?, ?, 0)')
+      .bind(tableId, id, '数据表 1'),
+    db.prepare('INSERT INTO base_fields (id, table_id, name, type, is_primary, position) VALUES (?, ?, ?, ?, 1, 0)')
+      .bind(fieldId, tableId, '标题', 'text'),
+    db.prepare('INSERT INTO base_views (id, table_id, name, type, position) VALUES (?, ?, ?, ?, 0)')
+      .bind(viewId, tableId, '表格视图', 'grid'),
+  ];
+  await db.batch(batch);
+
+  return {
+    id, org_id: orgId, name, description: description || null,
+    icon: '📊', creator_id: creatorId,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    table_count: 1,
+  };
+}
+
+/** 更新多维表格 */
+export async function updateBase(db: D1Database, id: string, data: { name?: string; description?: string; icon?: string }) {
+  const sets: string[] = ['updated_at = CURRENT_TIMESTAMP'];
+  const vals: unknown[] = [];
+  if (data.name !== undefined) { sets.push('name = ?'); vals.push(data.name); }
+  if (data.description !== undefined) { sets.push('description = ?'); vals.push(data.description); }
+  if (data.icon !== undefined) { sets.push('icon = ?'); vals.push(data.icon); }
+  vals.push(id);
+  await db.prepare(`UPDATE bases SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
+}
+
+/** 删除多维表格 */
+export async function deleteBase(db: D1Database, id: string) {
+  await db.prepare('DELETE FROM bases WHERE id = ?').bind(id).run();
+}
+
+/* ---------- 数据表 ---------- */
+
+/** 获取 base 下所有数据表 */
+export async function getBaseTables(db: D1Database, baseIdVal: string): Promise<BaseTable[]> {
+  const result = await db
+    .prepare('SELECT * FROM base_tables WHERE base_id = ? ORDER BY position')
+    .bind(baseIdVal)
+    .all<BaseTable>();
+  return result.results;
+}
+
+/** 创建数据表 */
+export async function createBaseTable(db: D1Database, baseIdVal: string, name: string): Promise<BaseTable> {
+  const id = baseId('tbl');
+  const fieldId = baseId('fld');
+  const viewId = baseId('viw');
+  const pos = await db.prepare('SELECT COALESCE(MAX(position),0)+1 AS p FROM base_tables WHERE base_id = ?')
+    .bind(baseIdVal).first<{ p: number }>();
+
+  const batch = [
+    db.prepare('INSERT INTO base_tables (id, base_id, name, position) VALUES (?, ?, ?, ?)')
+      .bind(id, baseIdVal, name, pos?.p || 0),
+    db.prepare('INSERT INTO base_fields (id, table_id, name, type, is_primary, position) VALUES (?, ?, ?, ?, 1, 0)')
+      .bind(fieldId, id, '标题', 'text'),
+    db.prepare('INSERT INTO base_views (id, table_id, name, type, position) VALUES (?, ?, ?, ?, 0)')
+      .bind(viewId, id, '表格视图', 'grid'),
+    db.prepare('UPDATE bases SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(baseIdVal),
+  ];
+  await db.batch(batch);
+
+  return { id, base_id: baseIdVal, name, position: pos?.p || 0, created_at: new Date().toISOString() };
+}
+
+/** 重命名数据表 */
+export async function renameBaseTable(db: D1Database, tableId: string, name: string) {
+  await db.prepare('UPDATE base_tables SET name = ? WHERE id = ?').bind(name, tableId).run();
+}
+
+/** 删除数据表 */
+export async function deleteBaseTable(db: D1Database, tableId: string) {
+  await db.prepare('DELETE FROM base_tables WHERE id = ?').bind(tableId).run();
+}
+
+/* ---------- 字段 ---------- */
+
+/** D1 返回的字段行原始类型 */
+interface BaseFieldRow {
+  id: string;
+  table_id: string;
+  name: string;
+  type: string;
+  options: string | null;
+  is_primary: number;
+  position: number;
+  created_at: string;
+}
+
+/** 获取数据表的所有字段 */
+export async function getBaseFields(db: D1Database, tableId: string): Promise<BaseField[]> {
+  const result = await db
+    .prepare('SELECT * FROM base_fields WHERE table_id = ? ORDER BY position')
+    .bind(tableId)
+    .all<BaseFieldRow>();
+  return result.results.map((r) => ({
+    id: r.id,
+    table_id: r.table_id,
+    name: r.name,
+    type: r.type as BaseField['type'],
+    options: r.options ? JSON.parse(r.options) as BaseFieldOptions : null,
+    is_primary: r.is_primary === 1,
+    position: r.position,
+    created_at: r.created_at,
+  }));
+}
+
+/** 创建字段 */
+export async function createBaseField(
+  db: D1Database,
+  tableId: string,
+  name: string,
+  type: string,
+  options?: BaseFieldOptions
+): Promise<BaseField> {
+  const id = baseId('fld');
+  const pos = await db.prepare('SELECT COALESCE(MAX(position),0)+1 AS p FROM base_fields WHERE table_id = ?')
+    .bind(tableId).first<{ p: number }>();
+  await db.prepare('INSERT INTO base_fields (id, table_id, name, type, options, position) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(id, tableId, name, type, options ? JSON.stringify(options) : null, pos?.p || 0).run();
+  return {
+    id, table_id: tableId, name, type: type as BaseField['type'],
+    options: options || null, is_primary: false, position: pos?.p || 0,
+    created_at: new Date().toISOString(),
+  };
+}
+
+/** 更新字段 */
+export async function updateBaseField(
+  db: D1Database,
+  fieldId: string,
+  data: { name?: string; type?: string; options?: BaseFieldOptions }
+) {
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  if (data.name !== undefined) { sets.push('name = ?'); vals.push(data.name); }
+  if (data.type !== undefined) { sets.push('type = ?'); vals.push(data.type); }
+  if (data.options !== undefined) { sets.push('options = ?'); vals.push(JSON.stringify(data.options)); }
+  if (sets.length === 0) return;
+  vals.push(fieldId);
+  await db.prepare(`UPDATE base_fields SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
+}
+
+/** 删除字段（同时清理记录中的数据） */
+export async function deleteBaseField(db: D1Database, fieldId: string, tableId: string) {
+  await db.batch([
+    db.prepare('DELETE FROM base_fields WHERE id = ? AND is_primary = 0').bind(fieldId),
+  ]);
+  // 从记录 data JSON 中移除该字段的值
+  const records = await db.prepare('SELECT id, data FROM base_records WHERE table_id = ?').bind(tableId).all<{ id: string; data: string }>();
+  if (records.results.length > 0) {
+    const stmts = records.results.map((r) => {
+      const parsed = JSON.parse(r.data) as Record<string, unknown>;
+      delete parsed[fieldId];
+      return db.prepare('UPDATE base_records SET data = ? WHERE id = ?').bind(JSON.stringify(parsed), r.id);
+    });
+    if (stmts.length > 0) await db.batch(stmts);
+  }
+}
+
+/* ---------- 记录 ---------- */
+
+/** 获取数据表的所有记录 */
+export async function getBaseRecords(db: D1Database, tableId: string): Promise<BaseRecord[]> {
+  const result = await db
+    .prepare('SELECT * FROM base_records WHERE table_id = ? ORDER BY created_at')
+    .bind(tableId)
+    .all<BaseRecord & { data: string }>();
+  return result.results.map((r) => ({
+    ...r,
+    data: JSON.parse(r.data as string) as Record<string, unknown>,
+  }));
+}
+
+/** 创建记录 */
+export async function createBaseRecord(
+  db: D1Database,
+  tableId: string,
+  data: Record<string, unknown>,
+  createdBy?: string
+): Promise<BaseRecord> {
+  const id = baseId('rec');
+  await db.prepare('INSERT INTO base_records (id, table_id, data, created_by) VALUES (?, ?, ?, ?)')
+    .bind(id, tableId, JSON.stringify(data), createdBy || null).run();
+  return {
+    id, table_id: tableId, data, created_by: createdBy || null,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  };
+}
+
+/** 更新记录 */
+export async function updateBaseRecord(db: D1Database, recordId: string, data: Record<string, unknown>) {
+  await db.prepare('UPDATE base_records SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .bind(JSON.stringify(data), recordId).run();
+}
+
+/** 删除记录 */
+export async function deleteBaseRecord(db: D1Database, recordId: string) {
+  await db.prepare('DELETE FROM base_records WHERE id = ?').bind(recordId).run();
+}
+
+/** 批量删除记录 */
+export async function deleteBaseRecords(db: D1Database, recordIds: string[]) {
+  if (recordIds.length === 0) return;
+  const stmts = recordIds.map((id) => db.prepare('DELETE FROM base_records WHERE id = ?').bind(id));
+  await db.batch(stmts);
+}
+
+/* ---------- 视图 ---------- */
+
+/** 获取数据表的所有视图 */
+export async function getBaseViews(db: D1Database, tableId: string): Promise<BaseView[]> {
+  const result = await db
+    .prepare('SELECT * FROM base_views WHERE table_id = ? ORDER BY position')
+    .bind(tableId)
+    .all<BaseView & { config: string }>();
+  return result.results.map((r) => ({
+    ...r,
+    config: JSON.parse(r.config as string) as BaseViewConfig,
+  }));
+}
+
+/** 创建视图 */
+export async function createBaseView(
+  db: D1Database,
+  tableId: string,
+  name: string,
+  type: string,
+  config?: BaseViewConfig
+): Promise<BaseView> {
+  const id = baseId('viw');
+  const pos = await db.prepare('SELECT COALESCE(MAX(position),0)+1 AS p FROM base_views WHERE table_id = ?')
+    .bind(tableId).first<{ p: number }>();
+  await db.prepare('INSERT INTO base_views (id, table_id, name, type, config, position) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(id, tableId, name, type, JSON.stringify(config || {}), pos?.p || 0).run();
+  return {
+    id, table_id: tableId, name, type: type as BaseView['type'],
+    config: config || {}, position: pos?.p || 0, created_at: new Date().toISOString(),
+  };
+}
+
+/** 更新视图配置 */
+export async function updateBaseView(db: D1Database, viewId: string, data: { name?: string; config?: BaseViewConfig }) {
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  if (data.name !== undefined) { sets.push('name = ?'); vals.push(data.name); }
+  if (data.config !== undefined) { sets.push('config = ?'); vals.push(JSON.stringify(data.config)); }
+  if (sets.length === 0) return;
+  vals.push(viewId);
+  await db.prepare(`UPDATE base_views SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
+}
+
+/** 删除视图 */
+export async function deleteBaseView(db: D1Database, viewId: string) {
+  await db.prepare('DELETE FROM base_views WHERE id = ?').bind(viewId).run();
 }

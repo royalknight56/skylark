@@ -240,3 +240,79 @@ CREATE TABLE IF NOT EXISTS documents (
   FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
   FOREIGN KEY (creator_id) REFERENCES users(id)
 );
+
+-- ==================== 多维表格 ====================
+
+-- 多维表格（相当于一个独立数据库）
+CREATE TABLE IF NOT EXISTS bases (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  icon TEXT DEFAULT '📊',
+  creator_id TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (creator_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bases_org ON bases(org_id);
+
+-- 数据表（每个 base 下可有多张表）
+CREATE TABLE IF NOT EXISTS base_tables (
+  id TEXT PRIMARY KEY,
+  base_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  position INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (base_id) REFERENCES bases(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_base_tables_base ON base_tables(base_id);
+
+-- 字段（列定义，type 决定单元格数据类型）
+CREATE TABLE IF NOT EXISTS base_fields (
+  id TEXT PRIMARY KEY,
+  table_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL CHECK(type IN (
+    'text','number','date','checkbox','select','multi_select',
+    'url','email','phone','rating','progress','member',
+    'created_at','updated_at'
+  )),
+  options TEXT,
+  is_primary INTEGER DEFAULT 0,
+  position INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (table_id) REFERENCES base_tables(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_base_fields_table ON base_fields(table_id);
+
+-- 记录（行数据，data 为 JSON: { field_id: value }）
+CREATE TABLE IF NOT EXISTS base_records (
+  id TEXT PRIMARY KEY,
+  table_id TEXT NOT NULL,
+  data TEXT DEFAULT '{}',
+  created_by TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (table_id) REFERENCES base_tables(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_base_records_table ON base_records(table_id);
+
+-- 视图（同一数据表的不同展现方式）
+CREATE TABLE IF NOT EXISTS base_views (
+  id TEXT PRIMARY KEY,
+  table_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT DEFAULT 'grid' CHECK(type IN ('grid','kanban','form')),
+  config TEXT DEFAULT '{}',
+  position INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (table_id) REFERENCES base_tables(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_base_views_table ON base_views(table_id);
