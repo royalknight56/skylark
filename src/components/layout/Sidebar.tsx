@@ -12,7 +12,6 @@ import Link from "next/link";
 import {
   MessageSquare,
   Users,
-  Calendar,
   FileText,
   Settings,
   LayoutGrid,
@@ -25,11 +24,13 @@ import {
 import { useOrg } from "@/lib/org-context";
 import { useAuth } from "@/lib/auth-context";
 
-/** 导航项配置 */
+/**
+ * 导航项配置
+ * 日程/日历已隐藏，路由与 API 仍保留：/calendar
+ */
 const navItems = [
   { icon: MessageSquare, label: "消息", href: "/messages" },
   { icon: Users, label: "通讯录", href: "/contacts" },
-  { icon: Calendar, label: "日历", href: "/calendar" },
   { icon: FileText, label: "云文档", href: "/docs" },
   { icon: LayoutGrid, label: "工作台", href: "/workspace" },
 ];
