@@ -20,12 +20,18 @@ export interface Organization {
   member_count?: number;
 }
 
+export type Gender = 'male' | 'female' | 'unknown';
+
 export interface OrgMember {
   org_id: string;
   user_id: string;
   role: OrgMemberRole;
   department: string | null;
   title: string | null;
+  employee_id: string | null;
+  phone: string | null;
+  work_city: string | null;
+  gender: Gender | null;
   joined_at: string;
   user?: User;
 }

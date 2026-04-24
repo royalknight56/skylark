@@ -877,13 +877,24 @@ export async function updateMemberInfo(
   db: D1Database,
   orgId: string,
   userId: string,
-  fields: { department?: string | null; title?: string | null }
+  fields: {
+    department?: string | null;
+    title?: string | null;
+    employee_id?: string | null;
+    phone?: string | null;
+    work_city?: string | null;
+    gender?: string | null;
+  }
 ): Promise<void> {
   const sets: string[] = [];
   const values: (string | null)[] = [];
 
   if (fields.department !== undefined) { sets.push('department = ?'); values.push(fields.department); }
   if (fields.title !== undefined) { sets.push('title = ?'); values.push(fields.title); }
+  if (fields.employee_id !== undefined) { sets.push('employee_id = ?'); values.push(fields.employee_id); }
+  if (fields.phone !== undefined) { sets.push('phone = ?'); values.push(fields.phone); }
+  if (fields.work_city !== undefined) { sets.push('work_city = ?'); values.push(fields.work_city); }
+  if (fields.gender !== undefined) { sets.push('gender = ?'); values.push(fields.gender); }
 
   if (sets.length === 0) return;
 
@@ -892,6 +903,37 @@ export async function updateMemberInfo(
     .prepare(`UPDATE org_members SET ${sets.join(', ')} WHERE org_id = ? AND user_id = ?`)
     .bind(...values)
     .run();
+}
+
+/** 获取单个成员详情（含用户信息） */
+export async function getMemberDetail(
+  db: D1Database,
+  orgId: string,
+  userId: string
+): Promise<(OrgMember & { user: User }) | null> {
+  const row = await db
+    .prepare(
+      `SELECT om.*, u.name, u.email, u.avatar_url, u.status, u.created_at AS user_created_at
+       FROM org_members om JOIN users u ON om.user_id = u.id
+       WHERE om.org_id = ? AND om.user_id = ?`
+    )
+    .bind(orgId, userId)
+    .first<OrgMember & { name: string; email: string; avatar_url: string | null; status: string; user_created_at: string }>();
+
+  if (!row) return null;
+  return {
+    ...row,
+    user: {
+      id: row.user_id, email: row.email, name: row.name,
+      avatar_url: row.avatar_url, status: row.status as User['status'],
+      current_org_id: orgId, created_at: row.user_created_at,
+    },
+  };
+}
+
+/** 更新用户基本信息（姓名等） */
+export async function updateUserName(db: D1Database, userId: string, name: string): Promise<void> {
+  await db.prepare('UPDATE users SET name = ? WHERE id = ?').bind(name, userId).run();
 }
 
 /** 移除成员 */
