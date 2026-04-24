@@ -78,6 +78,17 @@ export class ChatRoom extends DurableObject<CloudflareEnv> {
       });
     }
 
+    // 外部广播接口（供 Bot API 等服务端推送使用）
+    if (url.pathname.endsWith("/broadcast") && request.method === "POST") {
+      try {
+        const body = await request.text();
+        this.broadcast(body);
+        return new Response("OK", { status: 200 });
+      } catch {
+        return new Response("Bad Request", { status: 400 });
+      }
+    }
+
     return new Response("Not Found", { status: 404 });
   }
 

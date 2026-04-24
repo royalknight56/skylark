@@ -236,6 +236,58 @@ export interface OrgStats {
   pending_requests: number;
 }
 
+/* ==================== 机器人相关 ==================== */
+
+export type BotStatus = 'active' | 'disabled';
+
+export interface Bot {
+  id: string;
+  org_id: string;
+  name: string;
+  avatar_url: string | null;
+  description: string | null;
+  api_token: string;
+  webhook_url: string | null;
+  webhook_secret: string | null;
+  status: BotStatus;
+  created_by: string;
+  created_at: string;
+  /** 前端展示用 */
+  subscription_count?: number;
+  creator?: User;
+}
+
+export interface BotSubscription {
+  bot_id: string;
+  conversation_id: string;
+  subscribed_at: string;
+  /** 前端展示用 */
+  conversation?: Conversation;
+}
+
+/** Bot API 发送消息请求体 */
+export interface BotSendMessagePayload {
+  conversation_id: string;
+  content: string;
+  type?: 'text' | 'image' | 'file';
+}
+
+/** Webhook 事件推送体 */
+export interface BotWebhookEvent {
+  event: 'message';
+  bot_id: string;
+  timestamp: string;
+  data: {
+    message_id: string;
+    conversation_id: string;
+    sender_id: string;
+    sender_name: string;
+    content: string;
+    type: string;
+    created_at: string;
+  };
+}
+
 /* ==================== API 响应 ==================== */
 
 export interface ApiResponse<T = unknown> {

@@ -1,14 +1,34 @@
 /**
  * 会话消息 API - 获取消息列表 / 发送消息
+ * 发送消息时自动推送 webhook 事件到订阅了该会话的机器人
  * @author skylark
  */
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { getMessages, createMessage } from "@/lib/db/queries";
-import { getRequestUserId } from "@/lib/auth";
+import { getMessages, createMessage, getBotsSubscribedToConversation } from "@/lib/db/queries";
+import { getRequestUserId, getRequestUser } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
+import type { BotWebhookEvent } from "@/lib/types";
 
 export const runtime = "edge";
+
+/** 向机器人推送 webhook 事件（fire-and-forget，不阻塞响应） */
+async function pushWebhookEvent(bot: { id: string; webhook_url: string | null; webhook_secret: string | null }, event: BotWebhookEvent) {
+  if (!bot.webhook_url) return;
+  try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (bot.webhook_secret) {
+      headers["X-Bot-Secret"] = bot.webhook_secret;
+    }
+    await fetch(bot.webhook_url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(event),
+    });
+  } catch {
+    // webhook 推送失败不影响主流程
+  }
+}
 
 /** GET /api/conversations/[id]/messages */
 export async function GET(
@@ -61,6 +81,37 @@ export async function POST(
       file_mime: body.file_mime,
       file_r2_key: body.file_r2_key,
     });
+
+    // 异步推送 webhook 给订阅了该会话的机器人
+    const user = await getRequestUser(env.DB);
+    const subscribedBots = await getBotsSubscribedToConversation(env.DB, id);
+    if (subscribedBots.length > 0) {
+      const webhookEvent: BotWebhookEvent = {
+        event: "message",
+        bot_id: "",
+        timestamp: new Date().toISOString(),
+        data: {
+          message_id: message.id,
+          conversation_id: id,
+          sender_id: userId,
+          sender_name: user?.name || "未知用户",
+          content: body.content,
+          type: body.type || "text",
+          created_at: message.created_at,
+        },
+      };
+      // 并行推送给所有机器人
+      const pushPromises = subscribedBots.map((bot) =>
+        pushWebhookEvent(bot, { ...webhookEvent, bot_id: bot.id })
+      );
+      // 使用 waitUntil 不阻塞响应（Cloudflare Workers 环境下可用）
+      try {
+        const { ctx } = await getCloudflareContext();
+        ctx.waitUntil(Promise.allSettled(pushPromises));
+      } catch {
+        await Promise.allSettled(pushPromises);
+      }
+    }
 
     return NextResponse.json({ success: true, data: message }, { status: 201 });
   } catch (error) {

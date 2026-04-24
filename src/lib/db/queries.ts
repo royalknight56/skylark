@@ -19,6 +19,8 @@ import type {
   AdminLog,
   OrgStats,
   OrgMemberRole,
+  Bot,
+  BotSubscription,
 } from '../types';
 
 /* ==================== 企业/组织查询 ==================== */
@@ -1015,5 +1017,245 @@ export async function getOrgStats(
     total_messages: messages?.cnt ?? 0,
     total_documents: docs?.cnt ?? 0,
     pending_requests: pending?.cnt ?? 0,
+  };
+}
+
+/* ==================== 机器人 ==================== */
+
+/** 生成安全随机 token */
+function generateToken(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let token = 'sk-bot-';
+  for (let i = 0; i < 40; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return token;
+}
+
+/** 获取企业的机器人列表 */
+export async function getBots(
+  db: D1Database,
+  orgId: string
+): Promise<Bot[]> {
+  const result = await db
+    .prepare(
+      `SELECT b.*,
+        (SELECT COUNT(*) FROM bot_subscriptions WHERE bot_id = b.id) as subscription_count,
+        u.name as creator_name
+       FROM bots b
+       JOIN users u ON b.created_by = u.id
+       WHERE b.org_id = ?
+       ORDER BY b.created_at DESC`
+    )
+    .bind(orgId)
+    .all<Bot & { creator_name: string }>();
+  return result.results.map((row) => ({
+    ...row,
+    creator: {
+      id: row.created_by,
+      email: '',
+      name: row.creator_name,
+      avatar_url: null,
+      status: 'offline' as const,
+      current_org_id: null,
+      created_at: '',
+    },
+  }));
+}
+
+/** 获取单个机器人详情 */
+export async function getBot(
+  db: D1Database,
+  botId: string
+): Promise<Bot | null> {
+  return db
+    .prepare('SELECT * FROM bots WHERE id = ?')
+    .bind(botId)
+    .first<Bot>();
+}
+
+/** 通过 API token 查找机器人 */
+export async function getBotByToken(
+  db: D1Database,
+  token: string
+): Promise<Bot | null> {
+  return db
+    .prepare('SELECT * FROM bots WHERE api_token = ? AND status = ?')
+    .bind(token, 'active')
+    .first<Bot>();
+}
+
+/** 创建机器人 */
+export async function createBot(
+  db: D1Database,
+  bot: { id: string; org_id: string; name: string; description?: string; webhook_url?: string; created_by: string }
+): Promise<Bot> {
+  const apiToken = generateToken();
+  const webhookSecret = generateToken().replace('sk-bot-', 'whsec-');
+
+  await db
+    .prepare(
+      `INSERT INTO bots (id, org_id, name, description, api_token, webhook_url, webhook_secret, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(bot.id, bot.org_id, bot.name, bot.description || null, apiToken, bot.webhook_url || null, webhookSecret, bot.created_by)
+    .run();
+
+  return (await getBot(db, bot.id))!;
+}
+
+/** 更新机器人信息 */
+export async function updateBot(
+  db: D1Database,
+  botId: string,
+  fields: { name?: string; description?: string; avatar_url?: string; webhook_url?: string; status?: string }
+): Promise<Bot | null> {
+  const sets: string[] = [];
+  const values: (string | null)[] = [];
+
+  if (fields.name !== undefined) { sets.push('name = ?'); values.push(fields.name); }
+  if (fields.description !== undefined) { sets.push('description = ?'); values.push(fields.description); }
+  if (fields.avatar_url !== undefined) { sets.push('avatar_url = ?'); values.push(fields.avatar_url); }
+  if (fields.webhook_url !== undefined) { sets.push('webhook_url = ?'); values.push(fields.webhook_url); }
+  if (fields.status !== undefined) { sets.push('status = ?'); values.push(fields.status); }
+
+  if (sets.length === 0) return getBot(db, botId);
+
+  values.push(botId);
+  await db
+    .prepare(`UPDATE bots SET ${sets.join(', ')} WHERE id = ?`)
+    .bind(...values)
+    .run();
+
+  return getBot(db, botId);
+}
+
+/** 重新生成 API token */
+export async function regenerateBotToken(
+  db: D1Database,
+  botId: string
+): Promise<string> {
+  const newToken = generateToken();
+  await db
+    .prepare('UPDATE bots SET api_token = ? WHERE id = ?')
+    .bind(newToken, botId)
+    .run();
+  return newToken;
+}
+
+/** 删除机器人 */
+export async function deleteBot(
+  db: D1Database,
+  botId: string
+): Promise<void> {
+  await db.prepare('DELETE FROM bots WHERE id = ?').bind(botId).run();
+}
+
+/** 获取机器人订阅的会话列表 */
+export async function getBotSubscriptions(
+  db: D1Database,
+  botId: string
+): Promise<BotSubscription[]> {
+  const result = await db
+    .prepare(
+      `SELECT bs.*, c.name as conv_name, c.type as conv_type
+       FROM bot_subscriptions bs
+       JOIN conversations c ON bs.conversation_id = c.id
+       WHERE bs.bot_id = ?
+       ORDER BY bs.subscribed_at DESC`
+    )
+    .bind(botId)
+    .all<BotSubscription & { conv_name: string | null; conv_type: string }>();
+  return result.results.map((row) => ({
+    ...row,
+    conversation: {
+      id: row.conversation_id,
+      org_id: '',
+      type: row.conv_type as 'direct' | 'group',
+      name: row.conv_name,
+      avatar_url: null,
+      created_by: '',
+      created_at: '',
+      updated_at: '',
+    },
+  }));
+}
+
+/** 订阅会话 */
+export async function subscribeBotToConversation(
+  db: D1Database,
+  botId: string,
+  conversationId: string
+): Promise<void> {
+  await db
+    .prepare('INSERT OR IGNORE INTO bot_subscriptions (bot_id, conversation_id) VALUES (?, ?)')
+    .bind(botId, conversationId)
+    .run();
+}
+
+/** 取消订阅会话 */
+export async function unsubscribeBotFromConversation(
+  db: D1Database,
+  botId: string,
+  conversationId: string
+): Promise<void> {
+  await db
+    .prepare('DELETE FROM bot_subscriptions WHERE bot_id = ? AND conversation_id = ?')
+    .bind(botId, conversationId)
+    .run();
+}
+
+/** 获取订阅了某会话的所有活跃机器人 */
+export async function getBotsSubscribedToConversation(
+  db: D1Database,
+  conversationId: string
+): Promise<Bot[]> {
+  const result = await db
+    .prepare(
+      `SELECT b.* FROM bots b
+       JOIN bot_subscriptions bs ON b.id = bs.bot_id
+       WHERE bs.conversation_id = ? AND b.status = 'active' AND b.webhook_url IS NOT NULL`
+    )
+    .bind(conversationId)
+    .all<Bot>();
+  return result.results;
+}
+
+/** 以机器人身份发送消息（写入 messages 表，sender_id 使用 bot 的 id） */
+export async function createBotMessage(
+  db: D1Database,
+  msg: { id: string; conversation_id: string; bot_id: string; bot_name: string; content: string; type?: string }
+): Promise<Message> {
+  await db
+    .prepare(
+      `INSERT INTO messages (id, conversation_id, sender_id, content, type)
+       VALUES (?, ?, ?, ?, ?)`
+    )
+    .bind(msg.id, msg.conversation_id, msg.bot_id, msg.content, msg.type || 'text')
+    .run();
+
+  await db
+    .prepare('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .bind(msg.conversation_id)
+    .run();
+
+  return {
+    id: msg.id,
+    conversation_id: msg.conversation_id,
+    sender_id: msg.bot_id,
+    content: msg.content,
+    type: (msg.type || 'text') as Message['type'],
+    reply_to: null,
+    created_at: new Date().toISOString(),
+    updated_at: null,
+    sender: {
+      id: msg.bot_id,
+      email: '',
+      name: `🤖 ${msg.bot_name}`,
+      avatar_url: null,
+      status: 'online',
+      current_org_id: null,
+      created_at: '',
+    },
   };
 }

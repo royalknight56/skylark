@@ -150,6 +150,38 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE INDEX IF NOT EXISTS idx_messages_conv_time ON messages(conversation_id, created_at DESC);
 
+-- ==================== 机器人 ====================
+
+-- 机器人表（企业自建）
+CREATE TABLE IF NOT EXISTS bots (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  avatar_url TEXT,
+  description TEXT,
+  api_token TEXT UNIQUE NOT NULL,
+  webhook_url TEXT,
+  webhook_secret TEXT,
+  status TEXT DEFAULT 'active' CHECK(status IN ('active', 'disabled')),
+  created_by TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bots_org ON bots(org_id);
+CREATE INDEX IF NOT EXISTS idx_bots_token ON bots(api_token);
+
+-- 机器人订阅会话表
+CREATE TABLE IF NOT EXISTS bot_subscriptions (
+  bot_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  subscribed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (bot_id, conversation_id),
+  FOREIGN KEY (bot_id) REFERENCES bots(id) ON DELETE CASCADE,
+  FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+);
+
 -- ==================== 通讯录 ====================
 
 -- 联系人表（绑定企业）

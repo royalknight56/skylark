@@ -19,6 +19,7 @@ import {
   ArrowLeft,
   Loader2,
   ShieldX,
+  Bot,
 } from "lucide-react";
 import { useOrg } from "@/lib/org-context";
 import { useAuth } from "@/lib/auth-context";
@@ -30,6 +31,7 @@ const adminNav = [
   { icon: Building2, label: "部门管理", href: "/admin/departments" },
   { icon: Settings, label: "企业设置", href: "/admin/settings" },
   { icon: ClipboardCheck, label: "加入审批", href: "/admin/join-requests" },
+  { icon: Bot, label: "机器人管理", href: "/admin/bots" },
   { icon: ScrollText, label: "操作日志", href: "/admin/logs" },
 ];
 
