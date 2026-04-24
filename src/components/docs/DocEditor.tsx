@@ -28,6 +28,7 @@ import SlashMenu from "./editor/SlashMenu";
 import SearchReplace from "./editor/SearchReplace";
 import TOCSidebar from "./editor/TOCSidebar";
 import LinkModal from "./editor/LinkModal";
+import TableMenu from "./editor/TableMenu";
 import { Callout } from "./editor/extensions/callout";
 import { Columns, Column } from "./editor/extensions/columns";
 import { Details, DetailsSummary, DetailsContent } from "./editor/extensions/details";
@@ -281,10 +282,12 @@ export default function DocEditor({ document: doc, onSave, onShare }: DocEditorP
 
       {/* 编辑区域 + 目录 */}
       <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto relative">
           <div className="max-w-3xl mx-auto px-12 py-8">
             <EditorContent editor={editor} />
           </div>
+          {/* 表格浮动工具栏 */}
+          {!isReadonly && <TableMenu editor={editor} />}
         </div>
 
         {/* 目录大纲 */}

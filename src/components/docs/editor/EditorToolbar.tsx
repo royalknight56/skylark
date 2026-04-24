@@ -70,6 +70,7 @@ export default function EditorToolbar({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showBgPicker, setShowBgPicker] = useState(false);
   const [showHeadingMenu, setShowHeadingMenu] = useState(false);
+  const [showTableMenu, setShowTableMenu] = useState(false);
 
   const btn = useCallback(
     (active: boolean, onClick: () => void) => ({
@@ -270,9 +271,34 @@ export default function EditorToolbar({
       <button {...btn(editor.isActive("codeBlock"), () => editor.chain().focus().toggleCodeBlock().run())} title="代码块">
         <CodeSquare size={15} />
       </button>
-      <button {...btn(false, () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run())} title="表格">
-        <Table size={15} />
-      </button>
+      {/* 表格（下拉选择尺寸） */}
+      <div className="relative">
+        <button {...btn(editor.isActive("table"), () => setShowTableMenu(!showTableMenu))} title="插入表格">
+          <Table size={15} />
+        </button>
+        {showTableMenu && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setShowTableMenu(false)} />
+            <div className="absolute left-0 top-9 w-36 bg-panel-bg rounded-lg shadow-lg border border-panel-border z-50 py-1">
+              {[
+                { label: "2 × 2 表格", rows: 2, cols: 2 },
+                { label: "3 × 3 表格", rows: 3, cols: 3 },
+                { label: "4 × 4 表格", rows: 4, cols: 4 },
+                { label: "5 × 3 表格", rows: 5, cols: 3 },
+              ].map((t) => (
+                <button key={t.label}
+                  onClick={() => {
+                    editor.chain().focus().insertTable({ rows: t.rows, cols: t.cols, withHeaderRow: true }).run();
+                    setShowTableMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-text-primary hover:bg-list-hover transition-colors">
+                  <Table size={14} /> {t.label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
       <button {...btn(false, () => editor.chain().focus().insertColumns(2).run())} title="分栏">
         <Columns2 size={15} />
       </button>

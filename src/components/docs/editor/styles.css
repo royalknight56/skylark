@@ -214,6 +214,58 @@
   pointer-events: none;
 }
 
+/* 单元格背景色 */
+.tiptap-editor td[style*="background"],
+.tiptap-editor th[style*="background"] {
+  transition: background-color 0.15s;
+}
+
+/* 标题列样式（首列为 th 时） */
+.tiptap-editor tr > th:first-child {
+  background: var(--color-bg-page, #f5f6f7);
+  font-weight: 600;
+}
+
+/* 表格行 hover 效果 */
+.tiptap-editor table tr:hover td {
+  background-color: rgba(51, 112, 255, 0.03);
+}
+.tiptap-editor table tr:hover td[style*="background"] {
+  filter: brightness(0.97);
+}
+
+/* 列宽拖拽手柄 */
+.tiptap-editor .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background: var(--color-primary, #3370ff);
+  cursor: col-resize;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.tiptap-editor table:hover .column-resize-handle {
+  opacity: 0.5;
+}
+.tiptap-editor .column-resize-handle:hover,
+.tiptap-editor .column-resize-handle.active {
+  opacity: 1;
+}
+
+/* 表格整体 hover 时显示轻微边框强调 */
+.tiptap-editor table:hover {
+  box-shadow: 0 0 0 1px var(--color-primary, #3370ff) inset;
+  transition: box-shadow 0.15s;
+}
+
+/* 自适应 resize cursor */
+.tiptap-editor.resize-cursor {
+  cursor: col-resize;
+}
+
 /* ========= 高亮 ========= */
 .tiptap-editor mark {
   background-color: #fef08a;
