@@ -857,6 +857,143 @@ export async function regenerateInviteCode(
   return code;
 }
 
+/* ==================== 管理后台：邮件邀请 ==================== */
+
+/** 创建邀请记录（按邮箱邀请） */
+export async function createInvite(
+  db: D1Database,
+  invite: { id: string; org_id: string; inviter_id: string; invitee_email: string; expires_at: string }
+): Promise<OrgInvite> {
+  await db.prepare(
+    'INSERT INTO org_invites (id, org_id, inviter_id, invitee_email, expires_at) VALUES (?, ?, ?, ?, ?)'
+  ).bind(invite.id, invite.org_id, invite.inviter_id, invite.invitee_email, invite.expires_at).run();
+
+  return {
+    id: invite.id, org_id: invite.org_id, inviter_id: invite.inviter_id,
+    invitee_email: invite.invitee_email, status: 'pending',
+    created_at: new Date().toISOString(), expires_at: invite.expires_at,
+  };
+}
+
+/** 批量创建邀请（多个邮箱） */
+export async function createBatchInvites(
+  db: D1Database,
+  orgId: string,
+  inviterId: string,
+  emails: string[],
+  expiresAt: string
+): Promise<OrgInvite[]> {
+  const invites: OrgInvite[] = [];
+  const stmts = emails.map((email) => {
+    const id = `inv-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    invites.push({
+      id, org_id: orgId, inviter_id: inviterId, invitee_email: email,
+      status: 'pending', created_at: new Date().toISOString(), expires_at: expiresAt,
+    });
+    return db.prepare(
+      'INSERT INTO org_invites (id, org_id, inviter_id, invitee_email, expires_at) VALUES (?, ?, ?, ?, ?)'
+    ).bind(id, orgId, inviterId, email, expiresAt);
+  });
+  if (stmts.length > 0) await db.batch(stmts);
+  return invites;
+}
+
+/** 获取企业的邀请列表（含邀请人信息） */
+export async function getOrgInvites(
+  db: D1Database,
+  orgId: string,
+  status?: string
+): Promise<OrgInvite[]> {
+  const sql = status
+    ? `SELECT oi.*, u.name AS inviter_name, u.email AS inviter_email, u.avatar_url AS inviter_avatar
+       FROM org_invites oi JOIN users u ON oi.inviter_id = u.id
+       WHERE oi.org_id = ? AND oi.status = ? ORDER BY oi.created_at DESC`
+    : `SELECT oi.*, u.name AS inviter_name, u.email AS inviter_email, u.avatar_url AS inviter_avatar
+       FROM org_invites oi JOIN users u ON oi.inviter_id = u.id
+       WHERE oi.org_id = ? ORDER BY oi.created_at DESC`;
+
+  const result = status
+    ? await db.prepare(sql).bind(orgId, status).all<OrgInvite & { inviter_name: string; inviter_email: string; inviter_avatar: string | null }>()
+    : await db.prepare(sql).bind(orgId).all<OrgInvite & { inviter_name: string; inviter_email: string; inviter_avatar: string | null }>();
+
+  return result.results.map((row) => ({
+    ...row,
+    inviter: {
+      id: row.inviter_id, name: row.inviter_name, email: row.inviter_email,
+      avatar_url: row.inviter_avatar, status: 'offline' as const,
+      current_org_id: null, created_at: '',
+    },
+  }));
+}
+
+/** 通过邀请 ID 获取邀请详情（含企业信息） */
+export async function getInviteById(
+  db: D1Database,
+  inviteId: string
+): Promise<(OrgInvite & { org: Organization }) | null> {
+  const row = await db.prepare(
+    `SELECT oi.*, o.name AS org_name, o.logo_url AS org_logo, o.description AS org_desc,
+            o.owner_id AS org_owner_id, o.invite_code AS org_invite_code,
+            (SELECT COUNT(*) FROM org_members WHERE org_id = o.id) AS org_member_count
+     FROM org_invites oi JOIN organizations o ON oi.org_id = o.id
+     WHERE oi.id = ?`
+  ).bind(inviteId).first<OrgInvite & {
+    org_name: string; org_logo: string | null; org_desc: string | null;
+    org_owner_id: string; org_invite_code: string | null; org_member_count: number;
+  }>();
+
+  if (!row) return null;
+  return {
+    ...row,
+    org: {
+      id: row.org_id, name: row.org_name, logo_url: row.org_logo,
+      description: row.org_desc, invite_code: row.org_invite_code,
+      owner_id: row.org_owner_id, require_approval: false,
+      created_at: '', member_count: row.org_member_count,
+    },
+  };
+}
+
+/** 通过邮箱查找待处理的邀请 */
+export async function getPendingInviteByEmail(
+  db: D1Database,
+  orgId: string,
+  email: string
+): Promise<OrgInvite | null> {
+  return db.prepare(
+    "SELECT * FROM org_invites WHERE org_id = ? AND invitee_email = ? AND status = 'pending' LIMIT 1"
+  ).bind(orgId, email).first<OrgInvite>();
+}
+
+/** 接受邀请（更新状态 + 加入企业） */
+export async function acceptInvite(
+  db: D1Database,
+  inviteId: string,
+  userId: string
+): Promise<boolean> {
+  await db.prepare("UPDATE org_invites SET status = 'accepted' WHERE id = ?").bind(inviteId).run();
+  const invite = await db.prepare('SELECT * FROM org_invites WHERE id = ?').bind(inviteId).first<OrgInvite>();
+  if (!invite) return false;
+
+  const already = await isOrgMember(db, invite.org_id, userId);
+  if (!already) {
+    await joinOrganization(db, invite.org_id, userId);
+  }
+  return true;
+}
+
+/** 撤销/取消邀请 */
+export async function cancelInvite(db: D1Database, inviteId: string): Promise<void> {
+  await db.prepare("UPDATE org_invites SET status = 'expired' WHERE id = ?").bind(inviteId).run();
+}
+
+/** 将过期邀请标记为 expired */
+export async function expireInvites(db: D1Database, orgId: string): Promise<void> {
+  await db.prepare(
+    "UPDATE org_invites SET status = 'expired' WHERE org_id = ? AND status = 'pending' AND expires_at < datetime('now')"
+  ).bind(orgId).run();
+}
+
 /* ==================== 管理后台：成员操作 ==================== */
 
 /** 更新成员角色 */
@@ -1398,6 +1535,52 @@ export async function getBotsSubscribedToConversation(
     .bind(conversationId)
     .all<Bot>();
   return result.results;
+}
+
+/** 查找用户与机器人的现有会话（通过会话名匹配 bot:${botId}） */
+export async function findBotConversation(
+  db: D1Database,
+  orgId: string,
+  userId: string,
+  botId: string
+): Promise<string | null> {
+  const row = await db
+    .prepare(
+      `SELECT c.id FROM conversations c
+       JOIN conversation_members cm ON c.id = cm.conversation_id AND cm.user_id = ?
+       JOIN bot_subscriptions bs ON c.id = bs.conversation_id AND bs.bot_id = ?
+       WHERE c.org_id = ? AND c.type = 'direct'
+       LIMIT 1`
+    )
+    .bind(userId, botId, orgId)
+    .first<{ id: string }>();
+  return row?.id ?? null;
+}
+
+/** 创建用户与机器人的会话（自动订阅机器人） */
+export async function createBotConversation(
+  db: D1Database,
+  orgId: string,
+  userId: string,
+  bot: { id: string; name: string; avatar_url: string | null }
+): Promise<Conversation> {
+  const convId = `conv-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 4)}`;
+  // 创建会话，名称用机器人名（带机器人标识）
+  await db.prepare(
+    'INSERT INTO conversations (id, org_id, type, name, avatar_url, created_by) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(convId, orgId, 'direct', `🤖 ${bot.name}`, bot.avatar_url, userId).run();
+
+  // 添加用户为成员
+  await db.prepare(
+    'INSERT INTO conversation_members (conversation_id, user_id, role) VALUES (?, ?, ?)'
+  ).bind(convId, userId, 'owner').run();
+
+  // 自动订阅机器人到此会话
+  await db.prepare(
+    'INSERT OR IGNORE INTO bot_subscriptions (bot_id, conversation_id) VALUES (?, ?)'
+  ).bind(bot.id, convId).run();
+
+  return (await getConversation(db, convId))!;
 }
 
 /** 以机器人身份发送消息（写入 messages 表，sender_id 使用 bot 的 id） */

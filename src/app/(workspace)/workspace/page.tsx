@@ -9,7 +9,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bot, MessageSquare, Users, FileText, Table2,
-  Calendar, Shield, Loader2, ChevronRight, Zap,
+  Calendar, Shield, Loader2, ChevronRight, Zap, Send,
 } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
 import { useOrg } from "@/lib/org-context";
@@ -43,8 +43,27 @@ export default function WorkspacePage() {
 
   const [bots, setBots] = useState<BotItem[]>([]);
   const [loadingBots, setLoadingBots] = useState(true);
+  const [startingChat, setStartingChat] = useState<string | null>(null);
 
   const isOwner = currentOrg && user && currentOrg.owner_id === user.id;
+
+  /** 发起机器人对话 */
+  const handleChatWithBot = async (botId: string) => {
+    if (!currentOrg || startingChat) return;
+    setStartingChat(botId);
+    try {
+      const res = await fetch("/api/conversations/bot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ org_id: currentOrg.id, bot_id: botId }),
+      });
+      const json = (await res.json()) as { success: boolean; data?: { id: string } };
+      if (json.success && json.data) {
+        router.push(`/messages/${json.data.id}`);
+      }
+    } catch { /* ignore */ }
+    finally { setStartingChat(null); }
+  };
 
   /** 加载企业机器人 */
   useEffect(() => {
@@ -178,11 +197,26 @@ export default function WorkspacePage() {
                         <p className="text-xs text-text-secondary line-clamp-2 mb-2">{bot.description}</p>
                       )}
 
-                      {/* 元信息 */}
-                      <div className="flex items-center gap-2 text-[10px] text-text-placeholder">
-                        <span>由 {bot.creator.name} 创建</span>
-                        <span>·</span>
-                        <span>{new Date(bot.created_at).toLocaleDateString("zh-CN")}</span>
+                      {/* 操作区 */}
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center gap-2 text-[10px] text-text-placeholder">
+                          <span>由 {bot.creator.name} 创建</span>
+                          <span>·</span>
+                          <span>{new Date(bot.created_at).toLocaleDateString("zh-CN")}</span>
+                        </div>
+                        <button
+                          onClick={() => handleChatWithBot(bot.id)}
+                          disabled={startingChat === bot.id}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium
+                            text-primary bg-primary/10 hover:bg-primary/20 transition-colors disabled:opacity-50"
+                        >
+                          {startingChat === bot.id ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <Send size={12} />
+                          )}
+                          对话
+                        </button>
                       </div>
                     </div>
                   </div>

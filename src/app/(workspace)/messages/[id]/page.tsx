@@ -1,44 +1,28 @@
 /**
- * 具体会话页面 - 展示会话列表 + 聊天面板
+ * 具体会话页面 - 仅渲染聊天面板
+ * 会话列表由上层 layout 持久化
  * @author skylark
  */
 
 "use client";
 
-import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState, useEffect, use } from "react";
 import { Loader2 } from "lucide-react";
-import ConversationList from "@/components/messages/ConversationList";
 import ChatView from "@/components/messages/ChatView";
-import CreateGroupModal from "@/components/messages/CreateGroupModal";
-import { useOrg } from "@/lib/org-context";
+import { useMessages } from "../layout";
 import { useAuth } from "@/lib/auth-context";
 import type { Conversation, Message } from "@/lib/types";
 
-export default function ConversationPage() {
-  const { id } = useParams<{ id: string }>();
-  const router = useRouter();
-  const { currentOrg } = useOrg();
+export default function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const { user } = useAuth();
+  const { conversations } = useMessages();
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCreateGroup, setShowCreateGroup] = useState(false);
 
-  /** 拉取会话列表 */
-  useEffect(() => {
-    if (!currentOrg) return;
-    fetch(`/api/conversations?org_id=${currentOrg.id}`)
-      .then((res) => res.json() as Promise<{ success: boolean; data?: Conversation[] }>)
-      .then((json) => {
-        if (json.success && json.data) setConversations(json.data);
-      })
-      .catch(() => {});
-  }, [currentOrg?.id, currentOrg]);
-
-  /** 从列表中匹配当前会话，找不到时单独拉取详情 */
+  /** 从 layout 的会话列表中匹配当前会话，找不到时单独拉取 */
   useEffect(() => {
     const found = conversations.find((c) => c.id === id);
     if (found) {
@@ -57,6 +41,7 @@ export default function ConversationPage() {
   useEffect(() => {
     if (!id) return;
     setLoading(true);
+    setMessages([]);
     fetch(`/api/conversations/${id}/messages`)
       .then((res) => res.json() as Promise<{ success: boolean; data?: Message[] }>)
       .then((json) => {
@@ -68,59 +53,26 @@ export default function ConversationPage() {
 
   if (loading) {
     return (
-      <>
-        <ConversationList
-          conversations={conversations}
-          onClickCreate={() => setShowCreateGroup(true)}
-        />
-        <div className="flex-1 flex items-center justify-center bg-bg-page">
-          <Loader2 size={32} className="text-primary animate-spin" />
-        </div>
-        <CreateGroupModal
-          open={showCreateGroup}
-          onClose={() => setShowCreateGroup(false)}
-          onCreated={(convId) => router.push(`/messages/${convId}`)}
-        />
-      </>
+      <div className="flex-1 flex items-center justify-center bg-bg-page">
+        <Loader2 size={32} className="text-primary animate-spin" />
+      </div>
     );
   }
 
   if (!conversation) {
     return (
-      <>
-        <ConversationList
-          conversations={conversations}
-          onClickCreate={() => setShowCreateGroup(true)}
-        />
-        <div className="flex-1 flex items-center justify-center bg-bg-page">
-          <p className="text-text-secondary">会话不存在</p>
-        </div>
-        <CreateGroupModal
-          open={showCreateGroup}
-          onClose={() => setShowCreateGroup(false)}
-          onCreated={(convId) => router.push(`/messages/${convId}`)}
-        />
-      </>
+      <div className="flex-1 flex items-center justify-center bg-bg-page">
+        <p className="text-text-secondary">会话不存在</p>
+      </div>
     );
   }
 
   return (
-    <>
-      <ConversationList
-        conversations={conversations}
-        onClickCreate={() => setShowCreateGroup(true)}
-      />
-      <ChatView
-        conversation={conversation}
-        initialMessages={messages}
-        currentUserId={user?.id || ""}
-        memberCount={4}
-      />
-      <CreateGroupModal
-        open={showCreateGroup}
-        onClose={() => setShowCreateGroup(false)}
-        onCreated={(convId) => router.push(`/messages/${convId}`)}
-      />
-    </>
+    <ChatView
+      conversation={conversation}
+      initialMessages={messages}
+      currentUserId={user?.id || ""}
+      memberCount={4}
+    />
   );
 }

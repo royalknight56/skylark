@@ -47,6 +47,8 @@ export interface OrgInvite {
   created_at: string;
   expires_at: string | null;
   org?: Organization;
+  /** 前端展示用 */
+  inviter?: User;
 }
 
 /* ==================== 用户相关 ==================== */

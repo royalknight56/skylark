@@ -84,15 +84,15 @@ export async function POST(request: NextRequest) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "message",
-          message: {
+          payload: {
             id: message.id,
-            conversation_id: message.conversation_id,
-            sender_id: bot.id,
-            sender_name: `🤖 ${bot.name}`,
+            senderId: bot.id,
+            senderName: `🤖 ${bot.name}`,
+            senderAvatar: bot.avatar_url,
             content: message.content,
             type: message.type,
-            created_at: message.created_at,
           },
+          timestamp: message.created_at,
         }),
       });
     } catch {
