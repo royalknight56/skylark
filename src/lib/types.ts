@@ -123,6 +123,23 @@ export interface Contact {
   contact?: User;
 }
 
+/* ==================== 会议室相关 ==================== */
+
+export type RoomStatus = 'available' | 'maintenance' | 'disabled';
+
+export interface MeetingRoom {
+  id: string;
+  org_id: string;
+  name: string;
+  building: string;
+  floor: string | null;
+  room_number: string;
+  capacity: number;
+  facilities: string[] | null;
+  status: RoomStatus;
+  created_at: string;
+}
+
 /* ==================== 日历相关 ==================== */
 
 export interface CalendarEvent {
@@ -134,7 +151,10 @@ export interface CalendarEvent {
   all_day: boolean;
   color: string;
   creator_id: string;
+  room_id: string | null;
   created_at: string;
+  /** 前端展示用 */
+  room?: MeetingRoom;
 }
 
 export type AttendeeStatus = 'accepted' | 'declined' | 'pending';

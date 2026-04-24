@@ -28,6 +28,7 @@ import type {
   BaseRecord,
   BaseView,
   BaseViewConfig,
+  MeetingRoom,
 } from '../types';
 
 /* ==================== 企业/组织查询 ==================== */
@@ -533,9 +534,121 @@ export async function removeContact(
     .run();
 }
 
+/* ==================== 会议室查询 ==================== */
+
+/** 获取企业下所有会议室 */
+export async function getMeetingRooms(db: D1Database, orgId: string): Promise<MeetingRoom[]> {
+  const result = await db
+    .prepare('SELECT * FROM meeting_rooms WHERE org_id = ? ORDER BY building, room_number')
+    .bind(orgId)
+    .all<MeetingRoom & { facilities: string | null }>();
+  return result.results.map((r) => ({
+    ...r,
+    facilities: r.facilities ? JSON.parse(r.facilities as string) as string[] : null,
+  }));
+}
+
+/** 获取可用会议室 */
+export async function getAvailableRooms(db: D1Database, orgId: string): Promise<MeetingRoom[]> {
+  const result = await db
+    .prepare("SELECT * FROM meeting_rooms WHERE org_id = ? AND status = 'available' ORDER BY building, room_number")
+    .bind(orgId)
+    .all<MeetingRoom & { facilities: string | null }>();
+  return result.results.map((r) => ({
+    ...r,
+    facilities: r.facilities ? JSON.parse(r.facilities as string) as string[] : null,
+  }));
+}
+
+/** 获取单个会议室 */
+export async function getMeetingRoom(db: D1Database, roomId: string): Promise<MeetingRoom | null> {
+  const row = await db.prepare('SELECT * FROM meeting_rooms WHERE id = ?').bind(roomId)
+    .first<MeetingRoom & { facilities: string | null }>();
+  if (!row) return null;
+  return { ...row, facilities: row.facilities ? JSON.parse(row.facilities as string) as string[] : null };
+}
+
+/** 创建会议室 */
+export async function createMeetingRoom(
+  db: D1Database,
+  room: { org_id: string; name: string; building: string; floor?: string; room_number: string; capacity?: number; facilities?: string[] }
+): Promise<MeetingRoom> {
+  const id = `room-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  await db.prepare(
+    'INSERT INTO meeting_rooms (id, org_id, name, building, floor, room_number, capacity, facilities) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, room.org_id, room.name, room.building, room.floor || null,
+    room.room_number, room.capacity || 10, room.facilities ? JSON.stringify(room.facilities) : null
+  ).run();
+  return {
+    id, org_id: room.org_id, name: room.name, building: room.building,
+    floor: room.floor || null, room_number: room.room_number,
+    capacity: room.capacity || 10,
+    facilities: room.facilities || null,
+    status: 'available', created_at: new Date().toISOString(),
+  };
+}
+
+/** 更新会议室 */
+export async function updateMeetingRoom(
+  db: D1Database,
+  roomId: string,
+  data: { name?: string; building?: string; floor?: string; room_number?: string; capacity?: number; facilities?: string[]; status?: string }
+) {
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  if (data.name !== undefined) { sets.push('name = ?'); vals.push(data.name); }
+  if (data.building !== undefined) { sets.push('building = ?'); vals.push(data.building); }
+  if (data.floor !== undefined) { sets.push('floor = ?'); vals.push(data.floor); }
+  if (data.room_number !== undefined) { sets.push('room_number = ?'); vals.push(data.room_number); }
+  if (data.capacity !== undefined) { sets.push('capacity = ?'); vals.push(data.capacity); }
+  if (data.facilities !== undefined) { sets.push('facilities = ?'); vals.push(JSON.stringify(data.facilities)); }
+  if (data.status !== undefined) { sets.push('status = ?'); vals.push(data.status); }
+  if (sets.length === 0) return;
+  vals.push(roomId);
+  await db.prepare(`UPDATE meeting_rooms SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
+}
+
+/** 删除会议室 */
+export async function deleteMeetingRoom(db: D1Database, roomId: string) {
+  await db.prepare('DELETE FROM meeting_rooms WHERE id = ?').bind(roomId).run();
+}
+
+/** 检测会议室时间冲突（区间重叠判断） */
+export async function checkRoomConflict(
+  db: D1Database,
+  roomId: string,
+  startTime: string,
+  endTime: string,
+  excludeEventId?: string
+): Promise<CalendarEvent | null> {
+  const sql = excludeEventId
+    ? `SELECT * FROM calendar_events WHERE room_id = ? AND id != ? AND start_time < ? AND end_time > ? LIMIT 1`
+    : `SELECT * FROM calendar_events WHERE room_id = ? AND start_time < ? AND end_time > ? LIMIT 1`;
+
+  const stmt = excludeEventId
+    ? db.prepare(sql).bind(roomId, excludeEventId, endTime, startTime)
+    : db.prepare(sql).bind(roomId, endTime, startTime);
+
+  return stmt.first<CalendarEvent>() as Promise<CalendarEvent | null>;
+}
+
+/** 查询指定时段内某会议室的所有预订 */
+export async function getRoomBookings(
+  db: D1Database,
+  roomId: string,
+  startDate: string,
+  endDate: string
+): Promise<CalendarEvent[]> {
+  const result = await db
+    .prepare('SELECT * FROM calendar_events WHERE room_id = ? AND start_time < ? AND end_time > ? ORDER BY start_time')
+    .bind(roomId, endDate, startDate)
+    .all<CalendarEvent>();
+  return result.results;
+}
+
 /* ==================== 日历查询 ==================== */
 
-/** 获取企业下用户的日历事件 */
+/** 获取企业下用户的日历事件（关联会议室信息） */
 export async function getCalendarEvents(
   db: D1Database,
   orgId: string,
@@ -545,18 +658,34 @@ export async function getCalendarEvents(
 ): Promise<CalendarEvent[]> {
   const result = await db
     .prepare(
-      `SELECT ce.* FROM calendar_events ce
+      `SELECT ce.*, mr.name AS room_name, mr.building AS room_building,
+              mr.floor AS room_floor, mr.room_number AS room_room_number,
+              mr.capacity AS room_capacity
+       FROM calendar_events ce
        JOIN calendar_attendees ca ON ce.id = ca.event_id
+       LEFT JOIN meeting_rooms mr ON ce.room_id = mr.id
        WHERE ce.org_id = ? AND ca.user_id = ? AND ce.start_time >= ? AND ce.end_time <= ?
        ORDER BY ce.start_time`
     )
     .bind(orgId, userId, startDate, endDate)
-    .all<CalendarEvent>();
+    .all<CalendarEvent & {
+      room_name: string | null; room_building: string | null;
+      room_floor: string | null; room_room_number: string | null;
+      room_capacity: number | null;
+    }>();
 
-  return result.results;
+  return result.results.map((row) => ({
+    ...row,
+    room: row.room_id && row.room_name ? {
+      id: row.room_id, org_id: orgId, name: row.room_name,
+      building: row.room_building!, floor: row.room_floor,
+      room_number: row.room_room_number!, capacity: row.room_capacity || 10,
+      facilities: null, status: 'available' as const, created_at: '',
+    } : undefined,
+  }));
 }
 
-/** 创建日历事件 */
+/** 创建日历事件（支持预订会议室） */
 export async function createCalendarEvent(
   db: D1Database,
   event: {
@@ -570,17 +699,18 @@ export async function createCalendarEvent(
     color?: string;
     creator_id: string;
     attendee_ids: string[];
+    room_id?: string;
   }
 ): Promise<CalendarEvent> {
   await db
     .prepare(
-      `INSERT INTO calendar_events (id, org_id, title, description, start_time, end_time, all_day, color, creator_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO calendar_events (id, org_id, title, description, start_time, end_time, all_day, color, creator_id, room_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       event.id, event.org_id, event.title, event.description || null,
       event.start_time, event.end_time, event.all_day ? 1 : 0,
-      event.color || '#3370FF', event.creator_id
+      event.color || '#3370FF', event.creator_id, event.room_id || null
     )
     .run();
 

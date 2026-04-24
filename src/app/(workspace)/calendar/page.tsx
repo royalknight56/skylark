@@ -5,10 +5,11 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import CalendarView from "@/components/calendar/CalendarView";
 import EventCard from "@/components/calendar/EventCard";
+import CreateEventModal from "@/components/calendar/CreateEventModal";
 import { useOrg } from "@/lib/org-context";
 import type { CalendarEvent } from "@/lib/types";
 
@@ -17,8 +18,11 @@ export default function CalendarPage() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createDate, setCreateDate] = useState<Date | undefined>(undefined);
 
-  useEffect(() => {
+  /** 加载事件 */
+  const loadEvents = useCallback(() => {
     if (!currentOrg) { setLoading(false); return; }
     setLoading(true);
     setSelectedEvent(null);
@@ -30,7 +34,20 @@ export default function CalendarPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [currentOrg?.id, currentOrg]);
+  }, [currentOrg]);
+
+  useEffect(() => { loadEvents(); }, [loadEvents]);
+
+  /** 打开创建弹窗 */
+  const handleCreateEvent = (date?: Date) => {
+    setCreateDate(date);
+    setShowCreate(true);
+  };
+
+  /** 创建成功回调 */
+  const handleCreated = (event: CalendarEvent) => {
+    loadEvents();
+  };
 
   if (loading) {
     return (
@@ -63,17 +80,18 @@ export default function CalendarPage() {
               >
                 <div className="flex items-center gap-2">
                   <div className="w-1 h-8 rounded-full" style={{ backgroundColor: evt.color }} />
-                  <div>
-                    <p className="text-sm font-medium text-text-primary">{evt.title}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-text-primary truncate">{evt.title}</p>
                     <p className="text-xs text-text-secondary">
-                      {new Date(evt.start_time).toLocaleTimeString("zh-CN", {
-                        hour: "2-digit", minute: "2-digit",
-                      })}
+                      {new Date(evt.start_time).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
                       {" - "}
-                      {new Date(evt.end_time).toLocaleTimeString("zh-CN", {
-                        hour: "2-digit", minute: "2-digit",
-                      })}
+                      {new Date(evt.end_time).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
                     </p>
+                    {evt.room && (
+                      <p className="text-[10px] text-text-placeholder truncate">
+                        📍 {evt.room.name}
+                      </p>
+                    )}
                   </div>
                 </div>
               </button>
@@ -94,17 +112,18 @@ export default function CalendarPage() {
               >
                 <div className="flex items-center gap-2">
                   <div className="w-1 h-8 rounded-full" style={{ backgroundColor: evt.color }} />
-                  <div>
-                    <p className="text-sm font-medium text-text-primary">{evt.title}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-text-primary truncate">{evt.title}</p>
                     <p className="text-xs text-text-secondary">
-                      {new Date(evt.start_time).toLocaleDateString("zh-CN", {
-                        month: "short", day: "numeric",
-                      })}
+                      {new Date(evt.start_time).toLocaleDateString("zh-CN", { month: "short", day: "numeric" })}
                       {" "}
-                      {new Date(evt.start_time).toLocaleTimeString("zh-CN", {
-                        hour: "2-digit", minute: "2-digit",
-                      })}
+                      {new Date(evt.start_time).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
                     </p>
+                    {evt.room && (
+                      <p className="text-[10px] text-text-placeholder truncate">
+                        📍 {evt.room.name}
+                      </p>
+                    )}
                   </div>
                 </div>
               </button>
@@ -113,18 +132,27 @@ export default function CalendarPage() {
       </div>
 
       {/* 月视图 */}
-      <CalendarView events={events} onSelectEvent={setSelectedEvent} />
+      <CalendarView
+        events={events}
+        onSelectEvent={setSelectedEvent}
+        onCreateEvent={handleCreateEvent}
+      />
 
       {/* 事件详情弹窗 */}
       {selectedEvent && (
         <>
-          <div
-            className="fixed inset-0 bg-black/20 z-40"
-            onClick={() => setSelectedEvent(null)}
-          />
+          <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setSelectedEvent(null)} />
           <EventCard event={selectedEvent} onClose={() => setSelectedEvent(null)} />
         </>
       )}
+
+      {/* 创建日程弹窗 */}
+      <CreateEventModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={handleCreated}
+        initialDate={createDate}
+      />
     </div>
   );
 }

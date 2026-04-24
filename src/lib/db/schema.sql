@@ -197,6 +197,25 @@ CREATE TABLE IF NOT EXISTS contacts (
   FOREIGN KEY (contact_id) REFERENCES users(id)
 );
 
+-- ==================== 会议室 ====================
+
+-- 会议室表（绑定企业，管理员配置）
+CREATE TABLE IF NOT EXISTS meeting_rooms (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  building TEXT NOT NULL,
+  floor TEXT,
+  room_number TEXT NOT NULL,
+  capacity INTEGER DEFAULT 10,
+  facilities TEXT,
+  status TEXT DEFAULT 'available' CHECK(status IN ('available','maintenance','disabled')),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_meeting_rooms_org ON meeting_rooms(org_id);
+
 -- ==================== 日历 ====================
 
 -- 日历事件表（绑定企业）
@@ -210,10 +229,14 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   all_day BOOLEAN DEFAULT 0,
   color TEXT DEFAULT '#3370FF',
   creator_id TEXT NOT NULL,
+  room_id TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
-  FOREIGN KEY (creator_id) REFERENCES users(id)
+  FOREIGN KEY (creator_id) REFERENCES users(id),
+  FOREIGN KEY (room_id) REFERENCES meeting_rooms(id) ON DELETE SET NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_calendar_events_room ON calendar_events(room_id);
 
 CREATE TABLE IF NOT EXISTS calendar_attendees (
   event_id TEXT NOT NULL,

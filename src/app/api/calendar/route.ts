@@ -4,7 +4,7 @@
  */
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { getCalendarEvents, createCalendarEvent } from "@/lib/db/queries";
+import { getCalendarEvents, createCalendarEvent, checkRoomConflict } from "@/lib/db/queries";
 import { getRequestUserId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -41,9 +41,22 @@ export async function POST(request: NextRequest) {
       org_id: string; title: string; description?: string;
       start_time: string; end_time: string;
       all_day?: boolean; color?: string; attendee_ids?: string[];
+      room_id?: string;
     };
 
     if (!body.org_id) return NextResponse.json({ success: false, error: "缺少 org_id" }, { status: 400 });
+
+    // 会议室冲突检测
+    if (body.room_id) {
+      const conflict = await checkRoomConflict(env.DB, body.room_id, body.start_time, body.end_time);
+      if (conflict) {
+        return NextResponse.json({
+          success: false,
+          error: "该会议室在此时段已被预订",
+          conflict: { event_id: conflict.id, title: conflict.title, start_time: conflict.start_time, end_time: conflict.end_time },
+        }, { status: 409 });
+      }
+    }
 
     const id = `evt-${Date.now().toString(36)}`;
     const event = await createCalendarEvent(env.DB, {
@@ -57,6 +70,7 @@ export async function POST(request: NextRequest) {
       color: body.color,
       creator_id: userId,
       attendee_ids: body.attendee_ids || [userId],
+      room_id: body.room_id,
     });
 
     return NextResponse.json({ success: true, data: event }, { status: 201 });

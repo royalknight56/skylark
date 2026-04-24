@@ -5,7 +5,7 @@
 
 "use client";
 
-import { Clock, MapPin, Users, X } from "lucide-react";
+import { Clock, MapPin, Users, X, DoorOpen } from "lucide-react";
 import type { CalendarEvent } from "@/lib/types";
 
 interface EventCardProps {
@@ -47,6 +47,16 @@ export default function EventCard({ event, onClose }: EventCardProps) {
             {formatEventDateTime(event.start_time)} - {formatEventDateTime(event.end_time)}
           </span>
         </div>
+
+        {/* 会议室 */}
+        {event.room && (
+          <div className="flex items-center gap-2 mt-3 text-sm text-text-secondary">
+            <DoorOpen size={14} className="text-primary shrink-0" />
+            <span>
+              {event.room.name}（{event.room.building} {event.room.floor ? `${event.room.floor} ` : ""}{event.room.room_number}）
+            </span>
+          </div>
+        )}
 
         {/* 描述 */}
         {event.description && (

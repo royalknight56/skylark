@@ -14,6 +14,7 @@ interface CalendarViewProps {
   events: CalendarEvent[];
   onSelectDate?: (date: Date) => void;
   onSelectEvent?: (event: CalendarEvent) => void;
+  onCreateEvent?: (date?: Date) => void;
 }
 
 const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
@@ -76,7 +77,7 @@ function formatEventTime(dateStr: string): string {
   });
 }
 
-export default function CalendarView({ events, onSelectDate, onSelectEvent }: CalendarViewProps) {
+export default function CalendarView({ events, onSelectDate, onSelectEvent, onCreateEvent }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -126,7 +127,7 @@ export default function CalendarView({ events, onSelectDate, onSelectEvent }: Ca
             </button>
           </div>
         </div>
-        <button className="h-8 px-3 rounded-lg bg-primary text-white text-sm flex items-center gap-1.5 hover:bg-primary-hover transition-colors">
+        <button onClick={() => onCreateEvent?.()} className="h-8 px-3 rounded-lg bg-primary text-white text-sm flex items-center gap-1.5 hover:bg-primary-hover transition-colors">
           <Plus size={16} />
           新建日程
         </button>
@@ -155,7 +156,7 @@ export default function CalendarView({ events, onSelectDate, onSelectEvent }: Ca
             return (
               <div
                 key={index}
-                onClick={() => onSelectDate?.(date)}
+                onClick={() => { onSelectDate?.(date); onCreateEvent?.(date); }}
                 className={`min-h-[100px] border-r border-b border-panel-border p-1.5 cursor-pointer transition-colors
                   ${isCurrentMonth ? "bg-panel-bg" : "bg-bg-page"}
                   hover:bg-list-hover`}
