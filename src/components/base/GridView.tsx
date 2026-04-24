@@ -25,6 +25,7 @@ interface GridViewProps {
   fields: BaseField[];
   records: BaseRecord[];
   view: BaseView;
+  orgId?: string;
   onAddField: (name: string, type: BaseFieldType, options?: BaseFieldOptions) => Promise<void>;
   onUpdateField: (fieldId: string, data: { name?: string; type?: string; options?: BaseFieldOptions }) => Promise<void>;
   onDeleteField: (fieldId: string) => Promise<void>;
@@ -41,7 +42,7 @@ const COLOR_PRESETS = [
 ];
 
 export default function GridView({
-  baseId, tableId, fields, records, view,
+  baseId, tableId, fields, records, view, orgId,
   onAddField, onUpdateField, onDeleteField,
   onAddRecord, onUpdateRecord, onDeleteRecords,
   onUpdateView,
@@ -387,6 +388,7 @@ export default function GridView({
                       }
                       onChange={(val) => handleCellChange(record.id, field.id, val)}
                       readonly={field.type === "created_at" || field.type === "updated_at"}
+                      orgId={orgId}
                     />
                   </td>
                 ))}

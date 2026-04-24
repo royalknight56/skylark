@@ -15,10 +15,11 @@ import type { BaseField, BaseRecord, BaseView } from "@/lib/types";
 interface FormViewProps {
   fields: BaseField[];
   view: BaseView;
+  orgId?: string;
   onAddRecord: (initialData?: Record<string, unknown>) => Promise<void>;
 }
 
-export default function FormView({ fields, view, onAddRecord }: FormViewProps) {
+export default function FormView({ fields, view, orgId, onAddRecord }: FormViewProps) {
   const config = view.config || {};
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -102,6 +103,7 @@ export default function FormView({ fields, view, onAddRecord }: FormViewProps) {
                     field={field}
                     value={formData[field.id]}
                     onChange={(val) => handleChange(field.id, val)}
+                    orgId={orgId}
                   />
                 </div>
               </div>

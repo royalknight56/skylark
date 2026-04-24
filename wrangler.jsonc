@@ -65,6 +65,10 @@
 			{
 				"name": "CHAT_ROOM",
 				"class_name": "ChatRoom"
+			},
+			{
+				"name": "NOTIFICATION_HUB",
+				"class_name": "NotificationHub"
 			}
 		]
 	},
@@ -72,6 +76,10 @@
 		{
 			"tag": "v1",
 			"new_sqlite_classes": ["ChatRoom"]
+		},
+		{
+			"tag": "v2",
+			"new_sqlite_classes": ["NotificationHub"]
 		}
 	]
 }

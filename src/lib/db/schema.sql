@@ -130,6 +130,9 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_url TEXT,
   login_phone TEXT UNIQUE,
   status TEXT DEFAULT 'offline' CHECK(status IN ('online', 'offline', 'busy', 'away')),
+  status_text TEXT,
+  status_emoji TEXT,
+  signature TEXT,
   current_org_id TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (current_org_id) REFERENCES organizations(id)

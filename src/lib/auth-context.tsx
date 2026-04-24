@@ -27,6 +27,8 @@ interface AuthContextValue {
   register: (name: string, email: string) => Promise<boolean>;
   /** 登出 */
   logout: () => Promise<void>;
+  /** 刷新当前用户信息 */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -102,8 +104,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.replace("/login");
   }, [router]);
 
+  /** 刷新用户信息（在编辑个人资料后调用） */
+  const refreshUser = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      if (res.ok) {
+        const json = (await res.json()) as { success: boolean; data?: User };
+        if (json.success && json.data) setUser(json.data);
+      }
+    } catch {
+      // 忽略
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, loading, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

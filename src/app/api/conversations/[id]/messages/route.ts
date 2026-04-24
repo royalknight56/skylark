@@ -5,7 +5,7 @@
  */
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { getMessages, createMessage, getMessage, recallMessage, getBotsSubscribedToConversation } from "@/lib/db/queries";
+import { getMessages, createMessage, getMessage, recallMessage, getBotsSubscribedToConversation, getConversationMemberIds, getConversation } from "@/lib/db/queries";
 import { getRequestUserId, getRequestUser } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import type { BotWebhookEvent } from "@/lib/types";
@@ -81,13 +81,49 @@ export async function POST(
       file_r2_key: body.file_r2_key,
     });
 
-    // 异步推送 webhook 给订阅了该会话的机器人
     const user = await getRequestUser(env.DB);
+    const conv = await getConversation(env.DB, id, userId);
+
+    // 实时通知推送：向所有会话成员的 NotificationHub 推送新消息事件
+    const memberIds = await getConversationMemberIds(env.DB, id);
+    const notifyPayload = JSON.stringify({
+      type: "new_message",
+      payload: {
+        conversation_id: id,
+        conversation_name: conv?.name || null,
+        conversation_type: conv?.type || "direct",
+        message_id: message.id,
+        sender_id: userId,
+        sender_name: user?.name || "未知用户",
+        sender_avatar: user?.avatar_url || null,
+        content: body.content,
+        message_type: body.type || "text",
+        created_at: message.created_at,
+      },
+      timestamp: new Date().toISOString(),
+    });
+
+    const notifyPromises = memberIds
+      .filter((mid) => mid !== userId)
+      .map(async (memberId) => {
+        try {
+          const hubId = env.NOTIFICATION_HUB.idFromName(memberId);
+          const hub = env.NOTIFICATION_HUB.get(hubId);
+          await hub.fetch(new Request("https://do/push", {
+            method: "POST",
+            body: notifyPayload,
+          }));
+        } catch {
+          // 单个通知失败不影响其他
+        }
+      });
+
+    // 异步推送 webhook 给订阅了该会话的机器人
     const subscribedBots = await getBotsSubscribedToConversation(env.DB, id);
-    if (subscribedBots.length > 0) {
+    const botPromises = subscribedBots.map((bot) => {
       const webhookEvent: BotWebhookEvent = {
         event: "message",
-        bot_id: "",
+        bot_id: bot.id,
         timestamp: new Date().toISOString(),
         data: {
           message_id: message.id,
@@ -99,17 +135,15 @@ export async function POST(
           created_at: message.created_at,
         },
       };
-      // 并行推送给所有机器人
-      const pushPromises = subscribedBots.map((bot) =>
-        pushWebhookEvent(bot, { ...webhookEvent, bot_id: bot.id })
-      );
-      // 使用 waitUntil 不阻塞响应（Cloudflare Workers 环境下可用）
-      try {
-        const { ctx } = await getCloudflareContext();
-        ctx.waitUntil(Promise.allSettled(pushPromises));
-      } catch {
-        await Promise.allSettled(pushPromises);
-      }
+      return pushWebhookEvent(bot, webhookEvent);
+    });
+
+    // 使用 waitUntil 不阻塞响应
+    try {
+      const { ctx } = await getCloudflareContext();
+      ctx.waitUntil(Promise.allSettled([...notifyPromises, ...botPromises]));
+    } catch {
+      await Promise.allSettled([...notifyPromises, ...botPromises]);
     }
 
     return NextResponse.json({ success: true, data: message }, { status: 201 });

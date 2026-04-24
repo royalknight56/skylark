@@ -89,6 +89,9 @@ export interface User {
   avatar_url: string | null;
   login_phone?: string | null;
   status: 'online' | 'offline' | 'busy' | 'away';
+  status_text?: string | null;
+  status_emoji?: string | null;
+  signature?: string | null;
   current_org_id: string | null;
   created_at: string;
 }

@@ -1,17 +1,19 @@
 /**
  * 消息模块 Layout
  * 会话列表在此层持久化，切换会话时仅右侧内容区更新
+ * 监听全局 NotificationHub 事件自动刷新会话列表
  * @author skylark
  */
 
 "use client";
 
-import { useState, useEffect, useCallback, createContext, useContext } from "react";
+import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import { useRouter } from "next/navigation";
 import ConversationList from "@/components/messages/ConversationList";
 import CreateGroupModal from "@/components/messages/CreateGroupModal";
 import JoinGroupModal from "@/components/messages/JoinGroupModal";
 import { useOrg } from "@/lib/org-context";
+import { useNotification } from "@/lib/notification-context";
 import type { Conversation } from "@/lib/types";
 
 interface MessagesContextValue {
@@ -31,9 +33,11 @@ export function useMessages() {
 export default function MessagesLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { currentOrg } = useOrg();
+  const { lastEvent } = useNotification();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showJoinGroup, setShowJoinGroup] = useState(false);
+  const lastEventIdRef = useRef<string | null>(null);
 
   const loadConversations = useCallback(async () => {
     if (!currentOrg) return;
@@ -45,6 +49,15 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
   }, [currentOrg]);
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
+
+  // 收到新消息通知时刷新会话列表（去重）
+  useEffect(() => {
+    if (!lastEvent || lastEvent.type !== "new_message") return;
+    const eventId = lastEvent.payload.message_id;
+    if (eventId === lastEventIdRef.current) return;
+    lastEventIdRef.current = eventId;
+    loadConversations();
+  }, [lastEvent, loadConversations]);
 
   return (
     <MessagesContext.Provider value={{ conversations, refreshConversations: loadConversations }}>

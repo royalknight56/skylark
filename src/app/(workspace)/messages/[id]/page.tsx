@@ -6,17 +6,19 @@
 
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useCallback, use } from "react";
 import { Loader2 } from "lucide-react";
 import ChatView from "@/components/messages/ChatView";
 import { useMessages } from "../layout";
 import { useAuth } from "@/lib/auth-context";
+import { useNotification } from "@/lib/notification-context";
 import type { Conversation, Message } from "@/lib/types";
 
 export default function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { user } = useAuth();
   const { conversations, refreshConversations } = useMessages();
+  const { setTotalUnread } = useNotification();
 
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -67,13 +69,23 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     );
   }
 
+  /** 标记已读后刷新会话列表 + 重新计算全局未读数 */
+  const handleMarkRead = useCallback(async () => {
+    await refreshConversations();
+    try {
+      const res = await fetch("/api/conversations/unread-total");
+      const json = (await res.json()) as { success: boolean; data?: { total: number } };
+      if (json.success && json.data) setTotalUnread(json.data.total);
+    } catch { /* ignore */ }
+  }, [refreshConversations, setTotalUnread]);
+
   return (
     <ChatView
       conversation={conversation}
       initialMessages={messages}
       currentUserId={user?.id || ""}
       memberCount={4}
-      onMarkRead={refreshConversations}
+      onMarkRead={handleMarkRead}
     />
   );
 }

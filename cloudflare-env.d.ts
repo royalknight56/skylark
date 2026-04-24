@@ -10,6 +10,7 @@ declare namespace Cloudflare {
 		ASSETS: Fetcher;
 		NEXTJS_ENV: string;
 		CHAT_ROOM: DurableObjectNamespace /* ChatRoom */;
+		NOTIFICATION_HUB: DurableObjectNamespace /* NotificationHub */;
 		WORKER_SELF_REFERENCE: Fetcher /* skylark */;
 	}
 }

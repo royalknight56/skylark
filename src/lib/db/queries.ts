@@ -316,6 +316,18 @@ export async function getConversationMembers(
   return result.results;
 }
 
+/** 获取会话所有成员的 user_id 列表（轻量查询，用于通知推送） */
+export async function getConversationMemberIds(
+  db: D1Database,
+  conversationId: string
+): Promise<string[]> {
+  const result = await db
+    .prepare('SELECT user_id FROM conversation_members WHERE conversation_id = ?')
+    .bind(conversationId)
+    .all<{ user_id: string }>();
+  return result.results.map((r) => r.user_id);
+}
+
 /** 创建新会话（支持群描述、公开群设置） */
 export async function createConversation(
   db: D1Database,
@@ -2266,6 +2278,15 @@ export async function createBotMessage(
   db: D1Database,
   msg: { id: string; conversation_id: string; bot_id: string; bot_name: string; content: string; type?: string }
 ): Promise<Message> {
+  // 确保 bot 在 users 表中有记录，避免 sender_id 外键约束失败
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO users (id, email, name, status)
+       VALUES (?, ?, ?, 'online')`
+    )
+    .bind(msg.bot_id, `bot-${msg.bot_id}@skylark.bot`, `🤖 ${msg.bot_name}`)
+    .run();
+
   await db
     .prepare(
       `INSERT INTO messages (id, conversation_id, sender_id, content, type)

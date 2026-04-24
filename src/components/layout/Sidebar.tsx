@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { useOrg } from "@/lib/org-context";
 import { useAuth } from "@/lib/auth-context";
+import { useNotification } from "@/lib/notification-context";
+import ProfilePopup from "@/components/profile/ProfilePopup";
 
 /**
  * 导航项配置
@@ -42,7 +44,9 @@ export default function Sidebar() {
   const router = useRouter();
   const { currentOrg, orgs, loading, switchOrg } = useOrg();
   const { user } = useAuth();
+  const { totalUnread } = useNotification();
   const [showOrgMenu, setShowOrgMenu] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   /** 关闭菜单的外部点击 */
@@ -177,6 +181,7 @@ export default function Sidebar() {
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
+          const showBadge = item.href === "/messages" && totalUnread > 0;
           return (
             <Link
               key={item.href}
@@ -189,6 +194,12 @@ export default function Sidebar() {
               title={item.label}
             >
               <Icon size={20} />
+              {/* 未读消息角标 */}
+              {showBadge && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-danger text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                  {totalUnread > 99 ? "99+" : totalUnread}
+                </span>
+              )}
               <span
                 className="absolute left-14 px-2 py-1 bg-gray-800 text-white text-xs rounded
                   opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50"
@@ -239,10 +250,28 @@ export default function Sidebar() {
             设置
           </span>
         </Link>
-        <div className="w-8 h-8 rounded-full avatar-placeholder avatar-blue text-xs cursor-pointer" title={user?.name}>
+        <button
+          onClick={() => setShowProfile(true)}
+          className="relative w-8 h-8 rounded-full avatar-placeholder avatar-blue text-xs cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all"
+          title={user?.name}
+        >
           {user?.name?.charAt(0) || "?"}
-        </div>
+          {/* 状态指示点 */}
+          {user && (
+            <span
+              className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-sidebar-bg
+                ${user.status === "online" ? "bg-green-400"
+                  : user.status === "busy" ? "bg-red-400"
+                  : user.status === "away" ? "bg-yellow-400"
+                  : "bg-gray-400"
+                }`}
+            />
+          )}
+        </button>
       </div>
+
+      {/* 个人名片弹窗 */}
+      {showProfile && <ProfilePopup onClose={() => setShowProfile(false)} />}
     </aside>
   );
 }

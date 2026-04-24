@@ -18,24 +18,37 @@ function getCookie(cookieHeader: string | null, name: string): string | null {
 export default {
   async fetch(request: Request, env: CloudflareEnv, ctx: ExecutionContext) {
     const url = new URL(request.url);
+    const isWsUpgrade = request.headers.get("Upgrade") === "websocket";
 
-    // WebSocket 升级请求：/api/ws/{conversationId}
-    if (url.pathname.startsWith("/api/ws/") && request.headers.get("Upgrade") === "websocket") {
-      const conversationId = url.pathname.replace("/api/ws/", "");
-      if (!conversationId) return new Response("Missing conversationId", { status: 400 });
-
-      // 从 cookie 中读取用户 ID
+    // 全局通知 WebSocket：/api/ws/notify
+    if (url.pathname === "/api/ws/notify" && isWsUpgrade) {
       const userId = getCookie(request.headers.get("Cookie"), "skylark-uid");
       if (!userId) return new Response("Unauthorized", { status: 401 });
 
-      // 查询用户名
+      const doId = env.NOTIFICATION_HUB.idFromName(userId);
+      const stub = env.NOTIFICATION_HUB.get(doId);
+
+      const doUrl = new URL(request.url);
+      doUrl.pathname = "/websocket";
+      doUrl.searchParams.set("userId", userId);
+
+      return stub.fetch(doUrl.toString(), { headers: request.headers });
+    }
+
+    // 会话 WebSocket：/api/ws/{conversationId}
+    if (url.pathname.startsWith("/api/ws/") && isWsUpgrade) {
+      const conversationId = url.pathname.replace("/api/ws/", "");
+      if (!conversationId) return new Response("Missing conversationId", { status: 400 });
+
+      const userId = getCookie(request.headers.get("Cookie"), "skylark-uid");
+      if (!userId) return new Response("Unauthorized", { status: 401 });
+
       let userName = "用户";
       try {
         const row = await env.DB.prepare("SELECT name FROM users WHERE id = ?").bind(userId).first<{ name: string }>();
         if (row) userName = row.name;
       } catch { /* 查询失败不影响连接 */ }
 
-      // 转发到 Durable Object
       const doId = env.CHAT_ROOM.idFromName(conversationId);
       const stub = env.CHAT_ROOM.get(doId);
 
@@ -44,9 +57,7 @@ export default {
       doUrl.searchParams.set("userId", userId);
       doUrl.searchParams.set("userName", userName);
 
-      return stub.fetch(doUrl.toString(), {
-        headers: request.headers,
-      });
+      return stub.fetch(doUrl.toString(), { headers: request.headers });
     }
 
     // 其余请求交给 OpenNext / Next.js
@@ -56,3 +67,4 @@ export default {
 
 // Durable Object 必须从入口模块导出
 export { ChatRoom } from "./src/durable-objects/ChatRoom";
+export { NotificationHub } from "./src/durable-objects/NotificationHub";

@@ -7,8 +7,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Check, X, Star, ExternalLink } from "lucide-react";
-import type { BaseField, SelectOption } from "@/lib/types";
+import { Check, X, Star, ExternalLink, Search, Loader2 } from "lucide-react";
+import type { BaseField, SelectOption, User, OrgMember } from "@/lib/types";
 
 /** 选项颜色预设 */
 const OPTION_COLORS = [
@@ -31,9 +31,11 @@ interface CellEditorProps {
   onChange: (value: unknown) => void;
   /** 只读模式 */
   readonly?: boolean;
+  /** 企业 ID（人员字段需要） */
+  orgId?: string;
 }
 
-export default function CellEditor({ field, value, onChange, readonly }: CellEditorProps) {
+export default function CellEditor({ field, value, onChange, readonly, orgId }: CellEditorProps) {
   switch (field.type) {
     case "text":
     case "url":
@@ -55,7 +57,7 @@ export default function CellEditor({ field, value, onChange, readonly }: CellEdi
     case "progress":
       return <ProgressCell value={value as number} onChange={onChange} readonly={readonly} />;
     case "member":
-      return <MemberCell value={value as string} readonly />;
+      return <MemberCell value={value as string} onChange={onChange} readonly={readonly} orgId={orgId} />;
     case "created_at":
     case "updated_at":
       return <span className="text-xs text-text-secondary truncate">{value ? new Date(value as string).toLocaleString("zh-CN") : ""}</span>;
@@ -310,11 +312,101 @@ function ProgressCell({ value, onChange, readonly }: { value: number; onChange: 
   );
 }
 
-/* ========== 人员单元格（只读显示） ========== */
-function MemberCell({ value }: { value: string; readonly?: boolean }) {
+/* ========== 人员单元格 ========== */
+function MemberCell({ value, onChange, readonly, orgId }: { value: string; onChange: (v: unknown) => void; readonly?: boolean; orgId?: string }) {
+  const [open, setOpen] = useState(false);
+  const [members, setMembers] = useState<(OrgMember & { user: User })[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open || !orgId) return;
+    setLoading(true);
+    fetch(`/api/orgs/${orgId}/members`)
+      .then((res) => res.json())
+      .then((json) => {
+        const result = json as { success: boolean; data?: (OrgMember & { user: User })[] };
+        if (result.success && result.data) setMembers(result.data);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [open, orgId]);
+
+  useEffect(() => {
+    if (open) setTimeout(() => searchRef.current?.focus(), 50);
+  }, [open]);
+
+  const filtered = search.trim()
+    ? members.filter((m) => m.user.name.toLowerCase().includes(search.toLowerCase()) || m.user.email.toLowerCase().includes(search.toLowerCase()))
+    : members;
+
   return (
-    <div className="flex items-center px-2 min-h-8">
-      <span className="text-xs text-text-primary">{value || ""}</span>
+    <div className="relative w-full h-full flex items-center px-2 min-h-8">
+      <button
+        className="flex items-center gap-1 w-full min-h-6 cursor-text"
+        onDoubleClick={() => !readonly && setOpen(true)}
+        onClick={() => !readonly && setOpen(true)}
+      >
+        {value ? (
+          <span className="text-xs text-text-primary truncate">{value}</span>
+        ) : (
+          <span className="text-xs text-text-placeholder">选择人员…</span>
+        )}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full mt-1 w-56 bg-panel-bg rounded-lg shadow-lg border border-panel-border z-50 overflow-hidden">
+            {/* 搜索框 */}
+            <div className="p-2 border-b border-panel-border">
+              <div className="relative">
+                <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-placeholder" />
+                <input
+                  ref={searchRef}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="搜索成员…"
+                  className="w-full h-7 pl-7 pr-2 rounded bg-bg-page text-xs text-text-primary placeholder:text-text-placeholder outline-none"
+                />
+              </div>
+            </div>
+            {/* 清除选项 */}
+            {value && (
+              <button
+                onClick={() => { onChange(null); setOpen(false); setSearch(""); }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-text-placeholder hover:bg-list-hover"
+              >
+                <X size={12} /> 清除
+              </button>
+            )}
+            {/* 成员列表 */}
+            <div className="max-h-48 overflow-y-auto py-1">
+              {loading ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 size={16} className="text-primary animate-spin" />
+                </div>
+              ) : filtered.length === 0 ? (
+                <p className="text-xs text-text-placeholder text-center py-4">无匹配成员</p>
+              ) : (
+                filtered.map((m) => (
+                  <button
+                    key={m.user_id}
+                    onClick={() => { onChange(m.user.name); setOpen(false); setSearch(""); }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-list-hover"
+                  >
+                    <div className="w-5 h-5 rounded-full bg-primary/20 text-primary text-[10px] font-medium flex items-center justify-center shrink-0">
+                      {m.user.name.charAt(0)}
+                    </div>
+                    <span className="truncate text-text-primary">{m.user.name}</span>
+                    {m.user.name === value && <Check size={12} className="text-primary ml-auto shrink-0" />}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

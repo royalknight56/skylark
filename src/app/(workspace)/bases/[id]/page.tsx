@@ -411,6 +411,7 @@ export default function BaseDetailPage({ params }: { params: Promise<{ id: strin
             fields={activeTable.fields}
             records={activeTable.records}
             view={activeView}
+            orgId={base?.org_id}
             onAddField={handleAddField}
             onUpdateField={handleUpdateField}
             onDeleteField={handleDeleteField}
@@ -432,6 +433,7 @@ export default function BaseDetailPage({ params }: { params: Promise<{ id: strin
           <FormView
             fields={activeTable.fields}
             view={activeView}
+            orgId={base?.org_id}
             onAddRecord={handleAddRecord}
           />
         ) : null

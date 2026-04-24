@@ -5,7 +5,7 @@
  */
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { getBotByToken, createBotMessage, getBot } from "@/lib/db/queries";
+import { getBotByToken, createBotMessage, getConversationMemberIds } from "@/lib/db/queries";
 import { NextRequest, NextResponse } from "next/server";
 import type { BotSendMessagePayload } from "@/lib/types";
 
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
       type: body.type,
     });
 
-    // 通过 Durable Object 广播消息到 WebSocket 连接
+    // 通过 ChatRoom DO 广播消息到当前会话的 WebSocket 连接
     try {
       const doId = env.CHAT_ROOM.idFromName(body.conversation_id);
       const stub = env.CHAT_ROOM.get(doId);
@@ -96,7 +96,41 @@ export async function POST(request: NextRequest) {
         }),
       });
     } catch {
-      // Durable Object 广播失败不影响消息写入
+      // ChatRoom 广播失败不影响消息写入
+    }
+
+    // 通过 NotificationHub 推送实时通知给所有会话成员
+    try {
+      const memberIds = await getConversationMemberIds(env.DB, body.conversation_id);
+      const notifyPayload = JSON.stringify({
+        type: "new_message",
+        payload: {
+          conversation_id: body.conversation_id,
+          conversation_name: null,
+          conversation_type: "direct",
+          message_id: message.id,
+          sender_id: bot.id,
+          sender_name: `🤖 ${bot.name}`,
+          sender_avatar: bot.avatar_url || null,
+          content: body.content,
+          message_type: body.type || "text",
+          created_at: message.created_at,
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      const notifyPromises = memberIds.map(async (memberId) => {
+        try {
+          const hubId = env.NOTIFICATION_HUB.idFromName(memberId);
+          const hub = env.NOTIFICATION_HUB.get(hubId);
+          await hub.fetch(new Request("https://do/push", { method: "POST", body: notifyPayload }));
+        } catch { /* ignore */ }
+      });
+
+      const { ctx } = await getCloudflareContext();
+      ctx.waitUntil(Promise.allSettled(notifyPromises));
+    } catch {
+      // 通知失败不影响消息写入
     }
 
     return NextResponse.json({ success: true, data: message });
