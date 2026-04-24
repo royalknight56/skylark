@@ -15,6 +15,8 @@ import type { Conversation } from "@/lib/types";
 
 interface ConversationListProps {
   conversations: Conversation[];
+  /** 点击创建群聊按钮 */
+  onClickCreate?: () => void;
 }
 
 /** 格式化时间为简短展示 */
@@ -36,7 +38,7 @@ function formatTime(dateStr?: string): string {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
-export default function ConversationList({ conversations }: ConversationListProps) {
+export default function ConversationList({ conversations, onClickCreate }: ConversationListProps) {
   const pathname = usePathname();
   const [searchText, setSearchText] = useState("");
 
@@ -52,9 +54,10 @@ export default function ConversationList({ conversations }: ConversationListProp
       <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 border-b border-panel-border">
         <h2 className="text-base font-semibold text-text-primary">消息</h2>
         <button
+          onClick={onClickCreate}
           className="w-7 h-7 rounded-md flex items-center justify-center text-text-secondary
             hover:bg-list-hover transition-colors"
-          title="发起聊天"
+          title="创建群聊"
         >
           <Plus size={18} />
         </button>

@@ -6,16 +6,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import ConversationList from "@/components/messages/ConversationList";
 import ChatView from "@/components/messages/ChatView";
+import CreateGroupModal from "@/components/messages/CreateGroupModal";
 import { useOrg } from "@/lib/org-context";
 import { useAuth } from "@/lib/auth-context";
 import type { Conversation, Message } from "@/lib/types";
 
 export default function ConversationPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { currentOrg } = useOrg();
   const { user } = useAuth();
 
@@ -23,6 +25,7 @@ export default function ConversationPage() {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
 
   /** 拉取会话列表 */
   useEffect(() => {
@@ -66,10 +69,18 @@ export default function ConversationPage() {
   if (loading) {
     return (
       <>
-        <ConversationList conversations={conversations} />
+        <ConversationList
+          conversations={conversations}
+          onClickCreate={() => setShowCreateGroup(true)}
+        />
         <div className="flex-1 flex items-center justify-center bg-bg-page">
           <Loader2 size={32} className="text-primary animate-spin" />
         </div>
+        <CreateGroupModal
+          open={showCreateGroup}
+          onClose={() => setShowCreateGroup(false)}
+          onCreated={(convId) => router.push(`/messages/${convId}`)}
+        />
       </>
     );
   }
@@ -77,22 +88,38 @@ export default function ConversationPage() {
   if (!conversation) {
     return (
       <>
-        <ConversationList conversations={conversations} />
+        <ConversationList
+          conversations={conversations}
+          onClickCreate={() => setShowCreateGroup(true)}
+        />
         <div className="flex-1 flex items-center justify-center bg-bg-page">
           <p className="text-text-secondary">会话不存在</p>
         </div>
+        <CreateGroupModal
+          open={showCreateGroup}
+          onClose={() => setShowCreateGroup(false)}
+          onCreated={(convId) => router.push(`/messages/${convId}`)}
+        />
       </>
     );
   }
 
   return (
     <>
-      <ConversationList conversations={conversations} />
+      <ConversationList
+        conversations={conversations}
+        onClickCreate={() => setShowCreateGroup(true)}
+      />
       <ChatView
         conversation={conversation}
         initialMessages={messages}
         currentUserId={user?.id || ""}
         memberCount={4}
+      />
+      <CreateGroupModal
+        open={showCreateGroup}
+        onClose={() => setShowCreateGroup(false)}
+        onCreated={(convId) => router.push(`/messages/${convId}`)}
       />
     </>
   );

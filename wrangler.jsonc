@@ -9,8 +9,8 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "skylark",
-	// 自定义入口：复用 OpenNext 的 fetch 并 export ChatRoom（见 worker-entry.ts）
-	"main": "worker-entry.ts",
+	// postbuild 脚本会将 ChatRoom 导出追加到 worker.js
+	"main": ".open-next/worker.js",
 	"compatibility_date": "2026-04-23",
 	"compatibility_flags": [
 		"nodejs_compat",

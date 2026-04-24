@@ -6,15 +6,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { MessageSquare, Loader2 } from "lucide-react";
 import ConversationList from "@/components/messages/ConversationList";
+import CreateGroupModal from "@/components/messages/CreateGroupModal";
 import { useOrg } from "@/lib/org-context";
 import type { Conversation } from "@/lib/types";
 
 export default function MessagesPage() {
+  const router = useRouter();
   const { currentOrg } = useOrg();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
 
   useEffect(() => {
     if (!currentOrg) { setLoading(false); return; }
@@ -30,7 +34,10 @@ export default function MessagesPage() {
 
   return (
     <>
-      <ConversationList conversations={conversations} />
+      <ConversationList
+        conversations={conversations}
+        onClickCreate={() => setShowCreateGroup(true)}
+      />
       <div className="flex-1 flex flex-col items-center justify-center bg-bg-page">
         {loading ? (
           <Loader2 size={32} className="text-primary animate-spin" />
@@ -43,6 +50,12 @@ export default function MessagesPage() {
           </>
         )}
       </div>
+
+      <CreateGroupModal
+        open={showCreateGroup}
+        onClose={() => setShowCreateGroup(false)}
+        onCreated={(convId) => router.push(`/messages/${convId}`)}
+      />
     </>
   );
 }
