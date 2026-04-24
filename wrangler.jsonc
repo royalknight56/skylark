@@ -9,7 +9,8 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "skylark",
-	"main": ".open-next/worker.js",
+	// 自定义入口：复用 OpenNext 的 fetch 并 export ChatRoom（见 worker-entry.ts）
+	"main": "worker-entry.ts",
 	"compatibility_date": "2026-04-23",
 	"compatibility_flags": [
 		"nodejs_compat",
@@ -40,8 +41,8 @@
 	"d1_databases": [
 		{
 			"binding": "DB",
-			"database_name": "skylark-db",
-			"database_id": "local"
+			"database_name": "skylarkd1",
+			"database_id": "9ca9e373-23ab-4c43-bb09-fdda6eec79e1"
 		}
 	],
 	// R2 对象存储 - 存储头像、聊天附件、文档文件
@@ -55,7 +56,7 @@
 	"kv_namespaces": [
 		{
 			"binding": "KV",
-			"id": "local"
+			"id": "86aa8f49df384e88b74fb5cdd35e7712"
 		}
 	],
 	// Durable Objects - 实时聊天室 WebSocket
