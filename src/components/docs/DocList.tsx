@@ -5,8 +5,8 @@
 
 "use client";
 
-import { useState } from "react";
-import { Search, Plus, FileText, Table2, MoreHorizontal } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Search, Plus, FileText, Table2, MoreHorizontal, Send, Pencil, Trash2 } from "lucide-react";
 import type { Document } from "@/lib/types";
 
 interface DocListProps {
@@ -14,6 +14,9 @@ interface DocListProps {
   selectedId?: string;
   onSelect: (doc: Document) => void;
   onCreateNew: (type: "doc" | "sheet") => void;
+  onShare?: (doc: Document) => void;
+  onRename?: (doc: Document, newTitle: string) => void;
+  onDelete?: (doc: Document) => void;
 }
 
 /** 格式化更新时间 */
@@ -30,9 +33,34 @@ function formatUpdatedAt(dateStr: string): string {
   return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
 }
 
-export default function DocList({ documents, selectedId, onSelect, onCreateNew }: DocListProps) {
+export default function DocList({ documents, selectedId, onSelect, onCreateNew, onShare, onRename, onDelete }: DocListProps) {
   const [searchText, setSearchText] = useState("");
   const [showNewMenu, setShowNewMenu] = useState(false);
+  const [menuDocId, setMenuDocId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (renamingId && renameRef.current) renameRef.current.focus();
+  }, [renamingId]);
+
+  const startRename = (doc: Document) => {
+    setRenamingId(doc.id);
+    setRenameValue(doc.title);
+    setMenuDocId(null);
+  };
+
+  const confirmRename = (doc: Document) => {
+    const trimmed = renameValue.trim();
+    if (trimmed && trimmed !== doc.title) onRename?.(doc, trimmed);
+    setRenamingId(null);
+  };
+
+  const handleDelete = (doc: Document) => {
+    setMenuDocId(null);
+    if (confirm(`确定删除「${doc.title}」？此操作不可撤销。`)) onDelete?.(doc);
+  };
 
   const filtered = documents.filter((d) =>
     searchText ? d.title.toLowerCase().includes(searchText.toLowerCase()) : true
@@ -110,18 +138,60 @@ export default function DocList({ documents, selectedId, onSelect, onCreateNew }
             >
               <Icon size={20} className={iconColor} />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-text-primary truncate">{doc.title}</p>
-                <p className="text-xs text-text-secondary mt-0.5">
-                  {doc.creator?.name || "我"} · {formatUpdatedAt(doc.updated_at)}
-                </p>
+                {renamingId === doc.id ? (
+                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <input ref={renameRef} value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") confirmRename(doc);
+                        if (e.key === "Escape") setRenamingId(null);
+                      }}
+                      onBlur={() => confirmRename(doc)}
+                      className="flex-1 h-6 px-1.5 rounded border border-primary text-sm text-text-primary bg-bg-page outline-none" />
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-text-primary truncate">{doc.title}</p>
+                    <p className="text-xs text-text-secondary mt-0.5">
+                      {doc.creator?.name || "我"} · {formatUpdatedAt(doc.updated_at)}
+                    </p>
+                  </>
+                )}
               </div>
-              <button
-                onClick={(e) => e.stopPropagation()}
-                className="w-6 h-6 rounded flex items-center justify-center text-text-placeholder
-                  hover:bg-panel-border transition-colors opacity-0 group-hover:opacity-100"
-              >
-                <MoreHorizontal size={14} />
-              </button>
+              {renamingId !== doc.id && (
+                <div className="relative">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setMenuDocId(menuDocId === doc.id ? null : doc.id); }}
+                    className="w-6 h-6 rounded flex items-center justify-center text-text-placeholder
+                      hover:bg-panel-border transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <MoreHorizontal size={14} />
+                  </button>
+                  {menuDocId === doc.id && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setMenuDocId(null); }} />
+                      <div className="absolute right-0 top-7 w-36 bg-panel-bg rounded-lg shadow-lg border border-panel-border z-50 py-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); startRename(doc); }}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-text-primary hover:bg-list-hover transition-colors">
+                          <Pencil size={12} /> 重命名
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setMenuDocId(null); onShare?.(doc); }}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-text-primary hover:bg-list-hover transition-colors">
+                          <Send size={12} className="text-primary" /> 发送给联系人
+                        </button>
+                        <div className="h-px bg-panel-border my-1" />
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDelete(doc); }}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 transition-colors">
+                          <Trash2 size={12} /> 删除
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}

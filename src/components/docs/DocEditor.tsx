@@ -1,69 +1,143 @@
 /**
  * 文档编辑器组件
- * 基于 contentEditable 的轻量级富文本编辑器
+ * 基于 TipTap (ProseMirror) 的飞书风格文档编辑器
  * @author skylark
  */
 
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Underline from "@tiptap/extension-underline";
+import TextAlign from "@tiptap/extension-text-align";
+import { TextStyleKit } from "@tiptap/extension-text-style";
+import Highlight from "@tiptap/extension-highlight";
+import Link from "@tiptap/extension-link";
+import Image from "@tiptap/extension-image";
+import Placeholder from "@tiptap/extension-placeholder";
+import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table";
+import { TaskList, TaskItem } from "@tiptap/extension-list";
 import {
-  Bold,
-  Italic,
-  Underline,
-  List,
-  ListOrdered,
-  Heading1,
-  Heading2,
-  Code,
-  Save,
-  MoreHorizontal,
-  Share2,
-  Clock,
+  Save, Share2, Clock, MoreHorizontal,
+  Copy, Check, ExternalLink, BookOpen, Pencil,
 } from "lucide-react";
+import EditorToolbar from "./editor/EditorToolbar";
+import BubbleToolbar from "./editor/BubbleToolbar";
+import SlashMenu from "./editor/SlashMenu";
+import SearchReplace from "./editor/SearchReplace";
+import TOCSidebar from "./editor/TOCSidebar";
+import LinkModal from "./editor/LinkModal";
+import { Callout } from "./editor/extensions/callout";
+import { Columns, Column } from "./editor/extensions/columns";
+import { Details, DetailsSummary, DetailsContent } from "./editor/extensions/details";
+import { Video } from "./editor/extensions/video";
+import { MermaidBlock } from "./editor/extensions/mermaid";
+import { ProgressBar } from "./editor/extensions/progress";
 import type { Document } from "@/lib/types";
+import "./editor/styles.css";
 
 interface DocEditorProps {
   document: Document;
   onSave?: (content: string, title: string) => void;
+  onShare?: (doc: Document) => void;
 }
 
-/** 格式化时间 */
 function formatTime(dateStr: string): string {
   return new Date(dateStr).toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+    year: "numeric", month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit",
   });
 }
 
-export default function DocEditor({ document: doc, onSave }: DocEditorProps) {
+export default function DocEditor({ document: doc, onSave, onShare }: DocEditorProps) {
   const [title, setTitle] = useState(doc.title);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(doc.updated_at);
-  const editorRef = useRef<HTMLDivElement>(null);
+  const [isReadonly, setIsReadonly] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [showTOC, setShowTOC] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
 
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: [
+      StarterKit.configure({
+        heading: { levels: [1, 2, 3, 4] },
+      }),
+      Underline,
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
+      TextStyleKit,
+      Highlight.configure({ multicolor: true }),
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" },
+      }),
+      Image.configure({ inline: false, allowBase64: true }),
+      Placeholder.configure({ placeholder: "输入 / 唤起菜单，开始编写文档…" }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      Callout,
+      Columns,
+      Column,
+      Details,
+      DetailsSummary,
+      DetailsContent,
+      Video,
+      MermaidBlock,
+      ProgressBar,
+    ],
+    content: doc.content || "",
+    editorProps: {
+      attributes: { class: "tiptap-editor" },
+    },
+  });
+
+  /* 文档切换时更新内容 */
   useEffect(() => {
     setTitle(doc.title);
-    if (editorRef.current) {
-      editorRef.current.innerHTML = doc.content || "";
+    setLastSaved(doc.updated_at);
+    if (editor && doc.content !== undefined) {
+      editor.commands.setContent(doc.content || "");
     }
-  }, [doc]);
+  }, [doc, editor]);
 
-  /** 执行富文本命令 */
-  const execCommand = (command: string, value?: string) => {
-    window.document.execCommand(command, false, value);
-    editorRef.current?.focus();
-  };
+  /* 阅读/编辑模式切换 */
+  useEffect(() => {
+    editor?.setEditable(!isReadonly);
+  }, [isReadonly, editor]);
+
+  /* 快捷键 */
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        handleSave();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        setShowSearch(true);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setShowLinkModal(true);
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  });
 
   /** 保存文档 */
   const handleSave = useCallback(async () => {
-    if (!editorRef.current) return;
+    if (!editor) return;
     setIsSaving(true);
-
-    const content = editorRef.current.innerHTML;
+    const content = editor.getHTML();
     try {
       if (onSave) {
         onSave(content, title);
@@ -75,109 +149,162 @@ export default function DocEditor({ document: doc, onSave }: DocEditorProps) {
         });
       }
       setLastSaved(new Date().toISOString());
-    } catch {
-      // 保存失败
-    } finally {
-      setIsSaving(false);
-    }
-  }, [doc.id, title, onSave]);
+    } catch { /* 静默失败 */ }
+    finally { setIsSaving(false); }
+  }, [editor, doc.id, title, onSave]);
 
-  /** 快捷键保存 */
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-      e.preventDefault();
-      handleSave();
+  /** 插入链接回调 */
+  const handleInsertLink = useCallback((url: string, text: string) => {
+    if (!editor) return;
+    if (text) {
+      editor.chain().focus()
+        .insertContent(`<a href="${url}" target="_blank">${text}</a>`)
+        .run();
+    } else {
+      editor.chain().focus().setLink({ href: url }).run();
     }
-  };
+    setShowLinkModal(false);
+  }, [editor]);
 
-  /** 工具栏按钮 */
-  const ToolButton = ({
-    icon: Icon,
-    label,
-    onClick,
-  }: {
-    icon: React.ElementType;
-    label: string;
-    onClick: () => void;
-  }) => (
-    <button
-      onClick={onClick}
-      title={label}
-      className="w-8 h-8 rounded flex items-center justify-center text-text-secondary
-        hover:bg-list-hover hover:text-text-primary transition-colors"
-    >
-      <Icon size={16} />
-    </button>
-  );
+  /** 插入图片 */
+  const handleInsertImage = useCallback(() => {
+    const url = prompt("请输入图片 URL：");
+    if (url && editor) {
+      editor.chain().focus().setImage({ src: url }).run();
+    }
+  }, [editor]);
+
+  if (!editor) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-panel-bg">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
-    <div className="flex-1 flex flex-col bg-panel-bg overflow-hidden" onKeyDown={handleKeyDown}>
+    <div className="flex-1 flex flex-col bg-panel-bg overflow-hidden">
       {/* 顶栏 */}
-      <div className="h-14 px-6 flex items-center justify-between border-b border-panel-border flex-shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="h-14 px-6 flex items-center justify-between border-b border-panel-border shrink-0">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="text-base font-semibold text-text-primary bg-transparent border-none outline-none"
+            readOnly={isReadonly}
+            className="text-base font-semibold text-text-primary bg-transparent border-none outline-none flex-1 min-w-0"
             placeholder="无标题文档"
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <span className="text-xs text-text-placeholder flex items-center gap-1">
             <Clock size={12} />
             {lastSaved ? `保存于 ${formatTime(lastSaved)}` : "未保存"}
           </span>
+
+          {/* 阅读/编辑模式切换（顶栏也显示） */}
           <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="h-8 px-3 rounded-lg bg-primary text-white text-sm flex items-center gap-1.5
-              hover:bg-primary-hover transition-colors disabled:opacity-50"
+            onClick={() => setIsReadonly(!isReadonly)}
+            className={`h-8 px-3 rounded-lg text-sm flex items-center gap-1.5 transition-colors
+              ${isReadonly
+                ? "bg-primary/10 text-primary hover:bg-primary/20"
+                : "text-text-secondary hover:bg-list-hover"}`}
+            title={isReadonly ? "切换到编辑模式" : "切换到阅读模式"}
           >
-            <Save size={14} />
-            {isSaving ? "保存中..." : "保存"}
+            {isReadonly ? <><Pencil size={14} /> 编辑</> : <><BookOpen size={14} /> 阅读</>}
           </button>
-          <button className="w-8 h-8 rounded-lg flex items-center justify-center text-text-secondary hover:bg-list-hover transition-colors">
+
+          {!isReadonly && (
+            <button onClick={handleSave} disabled={isSaving}
+              className="h-8 px-3 rounded-lg bg-primary text-white text-sm flex items-center gap-1.5
+                hover:bg-primary-hover transition-colors disabled:opacity-50">
+              <Save size={14} /> {isSaving ? "保存中..." : "保存"}
+            </button>
+          )}
+
+          <button onClick={() => onShare?.(doc)} title="发送给联系人"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-text-secondary hover:bg-list-hover transition-colors">
             <Share2 size={16} />
           </button>
-          <button className="w-8 h-8 rounded-lg flex items-center justify-center text-text-secondary hover:bg-list-hover transition-colors">
-            <MoreHorizontal size={16} />
-          </button>
+
+          <div className="relative">
+            <button onClick={() => setShowMenu(!showMenu)}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-text-secondary hover:bg-list-hover transition-colors">
+              <MoreHorizontal size={16} />
+            </button>
+            {showMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+                <div className="absolute right-0 top-9 w-40 bg-panel-bg rounded-lg shadow-lg border border-panel-border z-50 py-1">
+                  <button onClick={() => { setShowTOC(!showTOC); setShowMenu(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-list-hover transition-colors">
+                    <BookOpen size={12} /> {showTOC ? "隐藏目录" : "显示目录"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const link = `${window.location.origin}/docs/${doc.id}`;
+                      navigator.clipboard.writeText(link);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                      setShowMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-list-hover transition-colors">
+                    {copied ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
+                    {copied ? "已复制" : "复制链接"}
+                  </button>
+                  <button onClick={() => { window.open(`/docs/${doc.id}`, "_blank"); setShowMenu(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-list-hover transition-colors">
+                    <ExternalLink size={12} /> 在新页面打开
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* 工具栏 */}
-      <div className="h-10 px-6 flex items-center gap-0.5 border-b border-panel-border flex-shrink-0">
-        <ToolButton icon={Heading1} label="标题1" onClick={() => execCommand("formatBlock", "h1")} />
-        <ToolButton icon={Heading2} label="标题2" onClick={() => execCommand("formatBlock", "h2")} />
-        <div className="w-px h-5 bg-panel-border mx-1" />
-        <ToolButton icon={Bold} label="加粗" onClick={() => execCommand("bold")} />
-        <ToolButton icon={Italic} label="斜体" onClick={() => execCommand("italic")} />
-        <ToolButton icon={Underline} label="下划线" onClick={() => execCommand("underline")} />
-        <div className="w-px h-5 bg-panel-border mx-1" />
-        <ToolButton icon={List} label="无序列表" onClick={() => execCommand("insertUnorderedList")} />
-        <ToolButton icon={ListOrdered} label="有序列表" onClick={() => execCommand("insertOrderedList")} />
-        <div className="w-px h-5 bg-panel-border mx-1" />
-        <ToolButton icon={Code} label="代码块" onClick={() => execCommand("formatBlock", "pre")} />
+      {/* 工具栏（阅读模式下隐藏） */}
+      {!isReadonly && (
+        <EditorToolbar
+          editor={editor}
+          isReadonly={isReadonly}
+          onToggleReadonly={() => setIsReadonly(!isReadonly)}
+          onToggleSearch={() => setShowSearch(!showSearch)}
+          onInsertLink={() => setShowLinkModal(true)}
+          onInsertImage={handleInsertImage}
+        />
+      )}
+
+      {/* 查找替换 */}
+      {showSearch && (
+        <SearchReplace editor={editor} onClose={() => setShowSearch(false)} />
+      )}
+
+      {/* 编辑区域 + 目录 */}
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-3xl mx-auto px-12 py-8">
+            <EditorContent editor={editor} />
+          </div>
+        </div>
+
+        {/* 目录大纲 */}
+        {showTOC && <TOCSidebar editor={editor} />}
       </div>
 
-      {/* 编辑区域 */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-12 py-8">
-          <div
-            ref={editorRef}
-            contentEditable
-            suppressContentEditableWarning
-            className="min-h-[500px] outline-none text-base text-text-primary leading-relaxed
-              [&>h1]:text-2xl [&>h1]:font-bold [&>h1]:mb-4 [&>h1]:mt-6
-              [&>h2]:text-xl [&>h2]:font-semibold [&>h2]:mb-3 [&>h2]:mt-5
-              [&>p]:mb-3
-              [&>ul]:list-disc [&>ul]:pl-6 [&>ul]:mb-3
-              [&>ol]:list-decimal [&>ol]:pl-6 [&>ol]:mb-3
-              [&>pre]:bg-gray-100 [&>pre]:rounded-lg [&>pre]:p-4 [&>pre]:mb-3 [&>pre]:font-mono [&>pre]:text-sm"
-            dangerouslySetInnerHTML={{ __html: doc.content || "" }}
-          />
-        </div>
-      </div>
+      {/* BubbleMenu — 选中文本浮动菜单 */}
+      {!isReadonly && <BubbleToolbar editor={editor} onInsertLink={() => setShowLinkModal(true)} />}
+
+      {/* SlashMenu — 斜杠命令 */}
+      {!isReadonly && <SlashMenu editor={editor} />}
+
+      {/* 链接弹窗 */}
+      {showLinkModal && (
+        <LinkModal
+          editor={editor}
+          onClose={() => setShowLinkModal(false)}
+          onSubmit={handleInsertLink}
+        />
+      )}
     </div>
   );
 }

@@ -29,6 +29,14 @@ const ROLE_CONFIG: Record<OrgMemberRole, { label: string; badge: string }> = {
   member: { label: "成员", badge: "bg-gray-100 text-gray-600" },
 };
 
+/** 在线状态配置 */
+const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
+  online: { label: "在线", dot: "bg-green-500" },
+  busy: { label: "忙碌", dot: "bg-red-500" },
+  away: { label: "离开", dot: "bg-yellow-500" },
+  offline: { label: "离线", dot: "bg-gray-300" },
+};
+
 const GENDER_OPTIONS: { value: Gender | ""; label: string }[] = [
   { value: "", label: "未设置" },
   { value: "male", label: "男" },
@@ -509,7 +517,7 @@ export default function AdminMembersPage() {
   return (
     <div className="flex h-full">
       {/* 左侧主内容 */}
-      <div className={`flex-1 min-w-0 ${selectedMember ? "pr-0" : ""}`}>
+      <div className="flex-1 min-w-0">
         {/* 头部 */}
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -609,10 +617,11 @@ export default function AdminMembersPage() {
                 <thead>
                   <tr className="border-b border-panel-border bg-bg-page/50">
                     <th className="text-left px-4 py-2.5 font-medium text-text-secondary">成员</th>
-                    <th className="text-left px-3 py-2.5 font-medium text-text-secondary hidden md:table-cell">部门</th>
-                    <th className="text-left px-3 py-2.5 font-medium text-text-secondary hidden lg:table-cell">职务</th>
-                    <th className="text-left px-3 py-2.5 font-medium text-text-secondary hidden lg:table-cell">工号</th>
+                    <th className="text-left px-3 py-2.5 font-medium text-text-secondary hidden md:table-cell">部门 / 职务</th>
+                    <th className="text-left px-3 py-2.5 font-medium text-text-secondary hidden lg:table-cell">人员类型</th>
+                    <th className="text-left px-3 py-2.5 font-medium text-text-secondary hidden lg:table-cell">手机号</th>
                     <th className="text-left px-3 py-2.5 font-medium text-text-secondary">角色</th>
+                    <th className="text-left px-3 py-2.5 font-medium text-text-secondary hidden xl:table-cell">状态</th>
                     <th className="text-left px-3 py-2.5 font-medium text-text-secondary hidden xl:table-cell">加入时间</th>
                     <th className="text-right px-3 py-2.5 font-medium text-text-secondary w-20">排序</th>
                   </tr>
@@ -623,6 +632,8 @@ export default function AdminMembersPage() {
                     const isSelected = selectedMember?.user_id === m.user_id;
                     const isPinned = m.sort_order > 0;
                     const pinnedIdx = isPinned ? pinnedMembers.indexOf(m) : -1;
+                    const userStatus = m.user?.status || "offline";
+                    const statusCfg = STATUS_CONFIG[userStatus] || STATUS_CONFIG.offline;
                     return (
                       <tr key={m.user_id}
                         draggable={isPinned}
@@ -632,6 +643,7 @@ export default function AdminMembersPage() {
                         onClick={() => openDetail(m)}
                         className={`border-b border-panel-border last:border-b-0 cursor-pointer transition-colors
                           ${isSelected ? "bg-primary/5" : isPinned ? "bg-amber-50/40 hover:bg-amber-50/70" : "hover:bg-list-hover"}`}>
+                        {/* 成员信息：头像（含在线状态）+ 姓名 + 邮箱 + 工号 + 标签 */}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             {isPinned && (
@@ -640,8 +652,13 @@ export default function AdminMembersPage() {
                                 <GripVertical size={14} />
                               </span>
                             )}
-                            <div className="relative">
+                            <div className="relative shrink-0">
                               <Avatar name={m.user?.name || ""} avatarUrl={m.user?.avatar_url} size="sm" />
+                              {/* 在线状态指示点 */}
+                              {m.member_status !== "suspended" && (
+                                <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${statusCfg.dot}`}
+                                  title={statusCfg.label} />
+                              )}
                               {m.member_status === "suspended" && (
                                 <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-white flex items-center justify-center">
                                   <ShieldOff size={7} className="text-white" />
@@ -651,6 +668,9 @@ export default function AdminMembersPage() {
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5">
                                 <p className="text-sm font-medium text-text-primary truncate">{m.user?.name}</p>
+                                {m.employee_id && (
+                                  <span className="shrink-0 text-[10px] text-text-placeholder font-mono">#{m.employee_id}</span>
+                                )}
                                 {isPinned && (
                                   <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-100 text-amber-700">
                                     <Pin size={8} /> 置顶
@@ -660,27 +680,78 @@ export default function AdminMembersPage() {
                                   <span className="shrink-0 inline-block px-1.5 py-0.5 rounded text-[9px] font-medium bg-red-100 text-red-600">暂停</span>
                                 )}
                               </div>
-                              <p className="text-xs text-text-placeholder truncate">{m.user?.email}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <p className="text-xs text-text-placeholder truncate">{m.user?.email}</p>
+                                {m.work_city && (
+                                  <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-text-placeholder">
+                                    <MapPin size={9} />{m.work_city}
+                                  </span>
+                                )}
+                              </div>
+                              {/* 状态签名 */}
+                              {m.user?.status_text && (
+                                <p className="text-[10px] text-text-placeholder truncate mt-0.5">
+                                  {m.user.status_emoji && <span className="mr-0.5">{m.user.status_emoji}</span>}
+                                  {m.user.status_text}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </td>
+                        {/* 部门 / 职务 合并列 */}
                         <td className="px-3 py-3 hidden md:table-cell">
-                          <span className="text-sm text-text-secondary">{m.department || "—"}</span>
+                          <div className="min-w-0">
+                            <p className="text-sm text-text-secondary truncate">{m.department || "—"}</p>
+                            {m.title && (
+                              <p className="text-xs text-text-placeholder truncate mt-0.5">{m.title}</p>
+                            )}
+                          </div>
                         </td>
+                        {/* 人员类型 */}
                         <td className="px-3 py-3 hidden lg:table-cell">
-                          <span className="text-sm text-text-secondary">{m.title || "—"}</span>
+                          {m.employee_type ? (
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-50 text-violet-600 border border-violet-100">
+                              {m.employee_type}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-text-placeholder">—</span>
+                          )}
                         </td>
+                        {/* 手机号 */}
                         <td className="px-3 py-3 hidden lg:table-cell">
-                          <span className="text-xs text-text-placeholder font-mono">{m.employee_id || "—"}</span>
+                          {m.phone ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-text-secondary">
+                              <Phone size={11} className="text-text-placeholder" />{m.phone}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-text-placeholder">—</span>
+                          )}
                         </td>
+                        {/* 角色 */}
                         <td className="px-3 py-3">
                           <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${roleConfig.badge}`}>
                             {roleConfig.label}
                           </span>
                         </td>
+                        {/* 在线状态 + 性别 */}
+                        <td className="px-3 py-3 hidden xl:table-cell">
+                          <div className="flex flex-col gap-1">
+                            <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusCfg.dot}`} />
+                              {statusCfg.label}
+                            </span>
+                            {m.gender && (
+                              <span className="text-[10px] text-text-placeholder">
+                                {m.gender === "male" ? "男" : "女"}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        {/* 加入时间 */}
                         <td className="px-3 py-3 hidden xl:table-cell">
                           <span className="text-xs text-text-placeholder">{new Date(m.joined_at).toLocaleDateString("zh-CN")}</span>
                         </td>
+                        {/* 排序 */}
                         <td className="px-3 py-3 text-right">
                           {m.role !== "owner" && (
                             <button
@@ -730,37 +801,40 @@ export default function AdminMembersPage() {
         )}
       </div>
 
-      {/* 右侧：成员详情侧栏 */}
+      {/* 右侧：成员详情抽屉（固定定位） */}
       {selectedMember && activeTab === "members" && (
-        <MemberDetailPanel
-          member={selectedMember}
-          isOwner={selectedMember.role === "owner"}
-          isSelf={selectedMember.user_id === user?.id}
-          editing={editing}
-          saving={saving}
-          departments={departments}
-          employeeTypes={employeeTypes}
-          editName={editName} setEditName={setEditName}
-          editDept={editDept} setEditDept={setEditDept}
-          editTitle={editTitle} setEditTitle={setEditTitle}
-          editEmployeeId={editEmployeeId} setEditEmployeeId={setEditEmployeeId}
-          editPhone={editPhone} setEditPhone={setEditPhone}
-          editWorkCity={editWorkCity} setEditWorkCity={setEditWorkCity}
-          editGender={editGender} setEditGender={setEditGender}
-          editEmployeeType={editEmployeeType} setEditEmployeeType={setEditEmployeeType}
-          editEmail={editEmail} setEditEmail={setEditEmail}
-          editLoginPhone={editLoginPhone} setEditLoginPhone={setEditLoginPhone}
-          editRole={editRole} setEditRole={setEditRole}
-          onEdit={() => { setEditing(true); setSaveError(""); }}
-          onCancel={() => { setEditing(false); setSaveError(""); populateForm(selectedMember); }}
-          onSave={handleSave}
-          saveError={saveError}
-          onSuspend={handleSuspendToggle}
-          suspending={suspending}
-          onDepart={() => openDepartModal(selectedMember)}
-          onRemove={() => handleRemove(selectedMember)}
-          onClose={() => setSelectedMember(null)}
-        />
+        <>
+          <div className="fixed inset-0 bg-black/20 z-30" onClick={() => setSelectedMember(null)} />
+          <MemberDetailPanel
+            member={selectedMember}
+            isOwner={selectedMember.role === "owner"}
+            isSelf={selectedMember.user_id === user?.id}
+            editing={editing}
+            saving={saving}
+            departments={departments}
+            employeeTypes={employeeTypes}
+            editName={editName} setEditName={setEditName}
+            editDept={editDept} setEditDept={setEditDept}
+            editTitle={editTitle} setEditTitle={setEditTitle}
+            editEmployeeId={editEmployeeId} setEditEmployeeId={setEditEmployeeId}
+            editPhone={editPhone} setEditPhone={setEditPhone}
+            editWorkCity={editWorkCity} setEditWorkCity={setEditWorkCity}
+            editGender={editGender} setEditGender={setEditGender}
+            editEmployeeType={editEmployeeType} setEditEmployeeType={setEditEmployeeType}
+            editEmail={editEmail} setEditEmail={setEditEmail}
+            editLoginPhone={editLoginPhone} setEditLoginPhone={setEditLoginPhone}
+            editRole={editRole} setEditRole={setEditRole}
+            onEdit={() => { setEditing(true); setSaveError(""); }}
+            onCancel={() => { setEditing(false); setSaveError(""); populateForm(selectedMember); }}
+            onSave={handleSave}
+            saveError={saveError}
+            onSuspend={handleSuspendToggle}
+            suspending={suspending}
+            onDepart={() => openDepartModal(selectedMember)}
+            onRemove={() => handleRemove(selectedMember)}
+            onClose={() => setSelectedMember(null)}
+          />
+        </>
       )}
 
       {/* 邀请成员弹窗 */}
@@ -1037,7 +1111,7 @@ function MemberDetailPanel({
 }: DetailPanelProps) {
   const roleConfig = ROLE_CONFIG[member.role];
   return (
-    <div className="w-80 xl:w-96 border-l border-panel-border bg-panel-bg shrink-0 flex flex-col h-full overflow-hidden">
+    <div className="fixed top-0 right-0 h-full w-96 bg-panel-bg shadow-2xl z-40 flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
       <div className="flex items-center justify-between px-4 py-3 border-b border-panel-border">
         <h3 className="text-sm font-semibold text-text-primary">成员详情</h3>
         <div className="flex items-center gap-1">

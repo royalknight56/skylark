@@ -75,10 +75,11 @@ export default function CalendarView({ events, onSelectDate, onSelectEvent, onCr
   const weekDays = useMemo(() => getWeekDays(currentDate), [currentDate]);
 
   const getEventsForDate = (date: Date): CalendarEvent[] => {
-    const dateStr = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, "0")}-${date.getDate().toString().padStart(2, "0")}`;
     return events.filter((e) => {
-      const eventDate = e.start_time.split("T")[0];
-      return eventDate === dateStr;
+      const s = new Date(e.start_time);
+      return s.getFullYear() === date.getFullYear()
+        && s.getMonth() === date.getMonth()
+        && s.getDate() === date.getDate();
     });
   };
 

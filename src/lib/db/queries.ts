@@ -1406,6 +1406,17 @@ export async function updateDocument(
   }
 }
 
+/** 重命名文档（仅更新标题） */
+export async function renameDocument(db: D1Database, docId: string, title: string): Promise<void> {
+  await db.prepare('UPDATE documents SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .bind(title, docId).run();
+}
+
+/** 删除文档 */
+export async function deleteDocument(db: D1Database, docId: string): Promise<void> {
+  await db.prepare('DELETE FROM documents WHERE id = ?').bind(docId).run();
+}
+
 /* ==================== 管理后台：企业信息 ==================== */
 
 /** 更新企业信息 */

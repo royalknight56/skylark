@@ -134,7 +134,7 @@ export interface ConversationMember {
 
 /* ==================== 消息相关 ==================== */
 
-export type MessageType = 'text' | 'image' | 'file' | 'system';
+export type MessageType = 'text' | 'image' | 'file' | 'system' | 'card';
 
 export interface Message {
   id: string;

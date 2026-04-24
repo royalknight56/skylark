@@ -20,7 +20,6 @@ import {
   Check,
   Loader2,
   Shield,
-  Table2,
   Calendar,
 } from "lucide-react";
 import { useOrg } from "@/lib/org-context";
@@ -33,8 +32,7 @@ const navItems = [
   { icon: MessageSquare, label: "消息", href: "/messages" },
   { icon: Calendar, label: "日历", href: "/calendar" },
   { icon: Users, label: "通讯录", href: "/contacts" },
-  { icon: FileText, label: "云文档", href: "/docs" },
-  { icon: Table2, label: "多维表格", href: "/bases" },
+  { icon: FileText, label: "云文档", href: "/docs", matchPrefixes: ["/docs", "/bases"] },
   { icon: LayoutGrid, label: "工作台", href: "/workspace" },
 ];
 
@@ -59,7 +57,8 @@ export default function Sidebar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [showOrgMenu]);
 
-  const isActive = (href: string) => {
+  const isActive = (href: string, matchPrefixes?: string[]) => {
+    if (matchPrefixes) return matchPrefixes.some((p) => pathname.startsWith(p));
     if (href === "/messages") return pathname.startsWith("/messages");
     return pathname.startsWith(href);
   };
@@ -179,7 +178,7 @@ export default function Sidebar() {
       <nav className="flex-1 flex flex-col items-center gap-1">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const active = isActive(item.href);
+          const active = isActive(item.href, (item as { matchPrefixes?: string[] }).matchPrefixes);
           const showBadge = item.href === "/messages" && totalUnread > 0;
           return (
             <Link

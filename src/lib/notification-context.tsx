@@ -94,22 +94,53 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       .catch(() => {});
   }, [user]);
 
-  // WebSocket 连接
+  // WebSocket 连接 + 轮询降级
   useEffect(() => {
     if (!user) return;
 
     let closed = false;
     let reconnectTimer: ReturnType<typeof setTimeout>;
     let pingTimer: ReturnType<typeof setInterval>;
+    let pollTimer: ReturnType<typeof setInterval>;
+    let failCount = 0;
+    let lastUnreadRef = 0;
+
+    /** 轮询未读数（WebSocket 不可用时的降级方案） */
+    const startPolling = () => {
+      if (pollTimer) return;
+      pollTimer = setInterval(() => {
+        fetch("/api/conversations/unread-total")
+          .then((r) => r.json())
+          .then((json: unknown) => {
+            const result = json as { success: boolean; data?: { total: number } };
+            if (result.success && result.data && result.data.total !== lastUnreadRef) {
+              lastUnreadRef = result.data.total;
+              setTotalUnread(result.data.total);
+            }
+          })
+          .catch(() => {});
+      }, 5000);
+    };
+
+    const stopPolling = () => {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = undefined as unknown as ReturnType<typeof setInterval>; }
+    };
 
     const connect = () => {
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
       const wsUrl = `${proto}//${window.location.host}/api/ws/notify`;
-      const ws = new WebSocket(wsUrl);
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch {
+        startPolling();
+        return;
+      }
       wsRef.current = ws;
 
       ws.onopen = () => {
-        // 每 30s 发心跳保持连接
+        failCount = 0;
+        stopPolling();
         pingTimer = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "ping" }));
@@ -124,14 +155,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           if (data.type === "new_message") {
             setLastEvent(data);
 
-            // 如果不在当前会话页，增加未读计数
             const currentConvPath = `/messages/${data.payload.conversation_id}`;
             const isViewingConv = pathnameRef.current === currentConvPath;
 
             if (!isViewingConv) {
               setTotalUnread((prev) => prev + 1);
 
-              // 内容预览（截断）
               const preview = data.payload.message_type === "image"
                 ? "[图片]"
                 : data.payload.message_type === "file"
@@ -142,7 +171,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
               const title = data.payload.conversation_name || data.payload.sender_name;
 
-              // Toast 应用内通知
               showToast({
                 title,
                 body: data.payload.conversation_name
@@ -155,7 +183,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
                 href: `/messages/${data.payload.conversation_id}`,
               });
 
-              // 浏览器原生通知（页面不在前台时）
               if (browserNotifRef.current && document.hidden) {
                 try {
                   new Notification(title, {
@@ -165,22 +192,23 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
                     icon: "/favicon.ico",
                     tag: data.payload.conversation_id,
                   });
-                } catch {
-                  // 浏览器通知失败不影响
-                }
+                } catch { /* ignore */ }
               }
             }
           }
-        } catch {
-          // 忽略无法解析的消息
-        }
+        } catch { /* ignore */ }
       };
 
       ws.onclose = () => {
         wsRef.current = null;
         clearInterval(pingTimer);
         if (!closed) {
-          reconnectTimer = setTimeout(connect, 3000);
+          failCount++;
+          if (failCount >= 3) {
+            startPolling();
+          } else {
+            reconnectTimer = setTimeout(connect, 2000);
+          }
         }
       };
 
@@ -195,6 +223,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       closed = true;
       clearTimeout(reconnectTimer);
       clearInterval(pingTimer);
+      stopPolling();
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;

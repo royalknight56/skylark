@@ -53,6 +53,16 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       .finally(() => setLoading(false));
   }, [id]);
 
+  /** 标记已读后刷新会话列表 + 重新计算全局未读数 */
+  const handleMarkRead = useCallback(async () => {
+    await refreshConversations();
+    try {
+      const res = await fetch("/api/conversations/unread-total");
+      const json = (await res.json()) as { success: boolean; data?: { total: number } };
+      if (json.success && json.data) setTotalUnread(json.data.total);
+    } catch { /* ignore */ }
+  }, [refreshConversations, setTotalUnread]);
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-bg-page">
@@ -68,16 +78,6 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       </div>
     );
   }
-
-  /** 标记已读后刷新会话列表 + 重新计算全局未读数 */
-  const handleMarkRead = useCallback(async () => {
-    await refreshConversations();
-    try {
-      const res = await fetch("/api/conversations/unread-total");
-      const json = (await res.json()) as { success: boolean; data?: { total: number } };
-      if (json.success && json.data) setTotalUnread(json.data.total);
-    } catch { /* ignore */ }
-  }, [refreshConversations, setTotalUnread]);
 
   return (
     <ChatView

@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Bot, MessageSquare, Users, FileText, Table2,
+  Bot, MessageSquare, Users, FileText,
   Calendar, Shield, Loader2, ChevronRight, Zap, Send,
 } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
@@ -31,7 +31,6 @@ const QUICK_LINKS = [
   { icon: MessageSquare, label: "消息", href: "/messages", color: "text-blue-500", bg: "bg-blue-50" },
   { icon: Users, label: "通讯录", href: "/contacts", color: "text-green-500", bg: "bg-green-50" },
   { icon: FileText, label: "云文档", href: "/docs", color: "text-purple-500", bg: "bg-purple-50" },
-  { icon: Table2, label: "多维表格", href: "/bases", color: "text-orange-500", bg: "bg-orange-50" },
   { icon: Calendar, label: "日历", href: "/calendar", color: "text-cyan-500", bg: "bg-cyan-50" },
   { icon: Shield, label: "管理后台", href: "/admin", color: "text-red-400", bg: "bg-red-50", ownerOnly: true },
 ];

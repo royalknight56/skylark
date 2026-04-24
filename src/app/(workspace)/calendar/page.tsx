@@ -50,16 +50,23 @@ export default function CalendarPage() {
   const handleDeleted = () => { loadEvents(); };
   const handleUpdated = () => { loadEvents(); };
 
-  /* 今日日程 */
+  /* 今日日程（基于本地时区比较） */
   const todayEvents = useMemo(() => {
-    const today = new Date().toISOString().split("T")[0];
-    return events.filter((e) => e.start_time.startsWith(today));
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+    return events.filter((e) => {
+      const s = new Date(e.start_time);
+      return s.getFullYear() === y && s.getMonth() === m && s.getDate() === d;
+    });
   }, [events]);
 
-  /* 近期日程（未来 7 天） */
+  /* 近期日程（未来 7 天，基于本地时区） */
   const upcomingEvents = useMemo(() => {
-    const today = new Date().toISOString().split("T")[0];
-    return events.filter((e) => e.start_time > today).slice(0, 8);
+    const todayStart = new Date();
+    todayStart.setHours(23, 59, 59, 999);
+    return events
+      .filter((e) => new Date(e.start_time) > todayStart)
+      .slice(0, 8);
   }, [events]);
 
   if (loading) {

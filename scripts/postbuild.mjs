@@ -12,8 +12,9 @@ const workerPath = resolve(process.cwd(), ".open-next/worker.js");
 const marker = "/* -- skylark-custom-exports -- */";
 const chatRoomExport = `
 ${marker}
-// ChatRoom Durable Object（由 postbuild 脚本追加）
+// Durable Objects（由 postbuild 脚本追加）
 export { ChatRoom } from "../src/durable-objects/ChatRoom.ts";
+export { NotificationHub } from "../src/durable-objects/NotificationHub.ts";
 `;
 
 let content = readFileSync(workerPath, "utf-8");

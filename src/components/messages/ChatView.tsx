@@ -92,24 +92,63 @@ export default function ChatView({
       .catch(() => {});
   }, [conv.id, onMarkRead]);
 
-  /** 建立 WebSocket 连接 */
+  /** 建立 WebSocket 连接，失败时降级为轮询 */
   useEffect(() => {
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${proto}//${window.location.host}/api/ws/${conv.id}`;
 
     let ws: WebSocket;
     let reconnectTimer: ReturnType<typeof setTimeout>;
+    let pollTimer: ReturnType<typeof setInterval>;
     let closed = false;
+    let wsConnected = false;
+    let failCount = 0;
+
+    /** 轮询拉取新消息（WebSocket 不可用时的降级方案） */
+    let lastPollHash = "";
+    const startPolling = () => {
+      if (pollTimer) return;
+      pollTimer = setInterval(() => {
+        fetch(`/api/conversations/${conv.id}/messages`)
+          .then((r) => r.json() as Promise<{ success: boolean; data?: Message[] }>)
+          .then((json) => {
+            if (!json.success || !json.data) return;
+            // 通过简易指纹检测变化：消息数 + 最后ID + 最后更新时间 + 回复/撤回状态
+            const msgs = json.data;
+            const last = msgs[msgs.length - 1];
+            const hash = `${msgs.length}:${last?.id}:${last?.updated_at}:${last?.recalled}:${msgs.reduce((n, m) => n + (m.reactions?.length || 0), 0)}`;
+            if (hash !== lastPollHash) {
+              lastPollHash = hash;
+              setMessages(msgs);
+            }
+          })
+          .catch(() => {});
+      }, 3000);
+    };
+
+    const stopPolling = () => {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = undefined as unknown as ReturnType<typeof setInterval>; }
+    };
 
     const connect = () => {
-      ws = new WebSocket(wsUrl);
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch {
+        startPolling();
+        return;
+      }
       wsRef.current = ws;
+
+      ws.onopen = () => {
+        wsConnected = true;
+        failCount = 0;
+        stopPolling();
+      };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
 
-          // 新消息
           if (data.type === "message" && data.payload) {
             const incoming = data.payload as {
               id?: string;
@@ -147,7 +186,6 @@ export default function ChatView({
             setMessages((prev) => [...prev, newMsg]);
           }
 
-          // 已读事件：对方已读，更新自己发的消息的已读状态
           if (data.type === "read" && data.payload) {
             const { userId: readerId } = data.payload as { userId: string };
             if (readerId !== currentUserId) {
@@ -161,7 +199,6 @@ export default function ChatView({
             }
           }
 
-          // 撤回事件
           if (data.type === "recall" && data.payload) {
             const { messageId, recalledBy, recallerName } = data.payload as {
               messageId: string;
@@ -191,7 +228,6 @@ export default function ChatView({
             );
           }
 
-          // 表情回复事件
           if (data.type === "reaction" && data.payload) {
             const { messageId, reactions } = data.payload as {
               messageId: string;
@@ -210,8 +246,15 @@ export default function ChatView({
 
       ws.onclose = () => {
         wsRef.current = null;
+        wsConnected = false;
         if (!closed) {
-          reconnectTimer = setTimeout(connect, 3000);
+          failCount++;
+          // 连续失败 3 次后降级为轮询
+          if (failCount >= 3) {
+            startPolling();
+          } else {
+            reconnectTimer = setTimeout(connect, 2000);
+          }
         }
       };
 
@@ -225,6 +268,7 @@ export default function ChatView({
     return () => {
       closed = true;
       clearTimeout(reconnectTimer);
+      stopPolling();
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;

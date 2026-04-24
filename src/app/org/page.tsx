@@ -18,14 +18,17 @@ import {
   Loader2,
   Check,
   AlertCircle,
+  LogOut,
 } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
+import { useAuth } from "@/lib/auth-context";
 import type { Organization } from "@/lib/types";
 
 type Tab = "select" | "create" | "join";
 
 export default function OrgSelectPage() {
   const router = useRouter();
+  const { logout } = useAuth();
   const [tab, setTab] = useState<Tab>("select");
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(false);
@@ -120,7 +123,7 @@ export default function OrgSelectPage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-page flex items-center justify-center p-4">
+    <div className="min-h-screen bg-bg-page flex items-center justify-center p-4 relative">
       <div className="w-full max-w-lg">
         {/* Logo + 标题 */}
         <div className="text-center mb-8">
@@ -129,6 +132,14 @@ export default function OrgSelectPage() {
           </div>
           <h1 className="text-2xl font-bold text-text-primary">Skylark</h1>
           <p className="text-text-secondary mt-1">选择一个企业开始工作</p>
+        </div>
+
+        {/* 退出登录 */}
+        <div className="absolute top-4 right-4">
+          <button onClick={logout}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-panel-bg hover:text-red-500 transition-colors">
+            <LogOut size={16} /> 退出登录
+          </button>
         </div>
 
         {/* Tab 切换 */}

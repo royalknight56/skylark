@@ -7,8 +7,9 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import Avatar from "@/components/ui/Avatar";
-import { FileIcon, Download, RotateCcw, Check, CheckCheck, SmilePlus } from "lucide-react";
+import { FileIcon, FileText, Table2, Download, RotateCcw, Check, CheckCheck, SmilePlus, ExternalLink } from "lucide-react";
 import type { Message, MessageReadInfo, MessageReaction } from "@/lib/types";
 
 /** 快捷表情列表 */
@@ -263,6 +264,43 @@ export default function MessageBubble({
               </button>
             </div>
           )}
+
+          {/* 卡片消息（文档分享等） */}
+          {message.type === "card" && (() => {
+            try {
+              const card = JSON.parse(message.content) as { card_type?: string; doc_id?: string; title?: string; doc_type?: string };
+              if (card.card_type === "doc") {
+                const DocIcon = card.doc_type === "sheet" ? Table2 : FileText;
+                return (
+                  <Link href={`/docs/${card.doc_id}`} onClick={(e) => e.stopPropagation()}
+                    className={`block rounded-xl overflow-hidden border min-w-56 max-w-72 transition-shadow hover:shadow-md
+                      ${isSelf ? "border-primary/20" : "border-panel-border shadow-sm"}`}>
+                    <div className={`px-3.5 py-3 flex items-center gap-3 ${isSelf ? "bg-primary/5" : "bg-panel-bg"}`}>
+                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <DocIcon size={20} className="text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-text-primary truncate">{card.title || "未命名文档"}</p>
+                        <p className="text-[10px] text-text-placeholder mt-0.5">
+                          {card.doc_type === "sheet" ? "电子表格" : "云文档"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className={`px-3.5 py-1.5 flex items-center justify-between border-t text-[10px]
+                      ${isSelf ? "border-primary/10 bg-primary/2" : "border-panel-border bg-bg-page/50"}`}>
+                      <span className="text-text-placeholder">点击查看文档</span>
+                      <ExternalLink size={10} className="text-text-placeholder" />
+                    </div>
+                  </Link>
+                );
+              }
+            } catch { /* 非 JSON 按文本降级 */ }
+            return (
+              <div className={`px-3 py-2 rounded-lg text-sm ${isSelf ? "bg-bg-bubble-self" : "bg-bg-bubble-other shadow-sm"}`}>
+                {message.content}
+              </div>
+            );
+          })()}
 
           {/* 悬停快捷表情按钮 */}
           {hovered && onReaction && (
