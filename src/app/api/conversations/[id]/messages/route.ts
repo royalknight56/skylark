@@ -5,7 +5,7 @@
  */
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { getMessages, createMessage, getBotsSubscribedToConversation } from "@/lib/db/queries";
+import { getMessages, createMessage, getMessage, recallMessage, getBotsSubscribedToConversation } from "@/lib/db/queries";
 import { getRequestUserId, getRequestUser } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import type { BotWebhookEvent } from "@/lib/types";
@@ -44,7 +44,7 @@ export async function GET(
     const limit = parseInt(searchParams.get("limit") || "50");
     const before = searchParams.get("before") || undefined;
 
-    const messages = await getMessages(env.DB, id, limit, before);
+    const messages = await getMessages(env.DB, id, limit, before, userId);
     return NextResponse.json({ success: true, data: messages });
   } catch (error) {
     return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
@@ -113,6 +113,97 @@ export async function POST(
     }
 
     return NextResponse.json({ success: true, data: message }, { status: 201 });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
+  }
+}
+
+/** 撤回消息的时间限制（24 小时） */
+const RECALL_TIME_LIMIT_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * DELETE /api/conversations/[id]/messages
+ * body: { message_id }
+ * 消息发送者可撤回自己的消息（24小时内）
+ * 群主/群管理员可撤回群内任意消息
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const userId = await getRequestUserId();
+    if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
+
+    const { id: conversationId } = await params;
+    const body = (await request.json()) as { message_id: string };
+
+    if (!body.message_id) {
+      return NextResponse.json({ success: false, error: "缺少 message_id" }, { status: 400 });
+    }
+
+    const { env } = await getCloudflareContext();
+
+    const msg = await getMessage(env.DB, body.message_id);
+    if (!msg) {
+      return NextResponse.json({ success: false, error: "消息不存在" }, { status: 404 });
+    }
+    if (msg.conversation_id !== conversationId) {
+      return NextResponse.json({ success: false, error: "消息不属于该会话" }, { status: 400 });
+    }
+    if (msg.recalled) {
+      return NextResponse.json({ success: false, error: "消息已被撤回" }, { status: 400 });
+    }
+
+    const isSender = msg.sender_id === userId;
+
+    // 非发送者需检查是否群主/管理员（通过 conversation.creator_id）
+    if (!isSender) {
+      const conv = await env.DB
+        .prepare('SELECT created_by, type FROM conversations WHERE id = ?')
+        .bind(conversationId)
+        .first<{ created_by: string; type: string }>();
+
+      if (!conv || conv.created_by !== userId) {
+        return NextResponse.json({ success: false, error: "无权撤回此消息" }, { status: 403 });
+      }
+    }
+
+    // 发送者撤回需检查时间限制
+    if (isSender) {
+      const elapsed = Date.now() - new Date(msg.created_at).getTime();
+      if (elapsed > RECALL_TIME_LIMIT_MS) {
+        return NextResponse.json({ success: false, error: "消息发送已超过 24 小时，无法撤回" }, { status: 400 });
+      }
+    }
+
+    const success = await recallMessage(env.DB, body.message_id, userId);
+    if (!success) {
+      return NextResponse.json({ success: false, error: "撤回失败" }, { status: 500 });
+    }
+
+    // 通过 Durable Object 广播撤回事件
+    const user = await getRequestUser(env.DB);
+    try {
+      const roomId = env.CHAT_ROOM.idFromName(conversationId);
+      const roomStub = env.CHAT_ROOM.get(roomId);
+      await roomStub.fetch(new Request("https://do/broadcast", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "recall",
+          payload: {
+            messageId: body.message_id,
+            recalledBy: userId,
+            recallerName: user?.name || "管理员",
+          },
+          timestamp: new Date().toISOString(),
+        }),
+      }));
+    } catch {
+      // DO 广播失败不影响撤回结果
+    }
+
+    return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
   }

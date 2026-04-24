@@ -9,7 +9,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, UserPlus } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
 import type { Conversation } from "@/lib/types";
 
@@ -17,6 +17,8 @@ interface ConversationListProps {
   conversations: Conversation[];
   /** 点击创建群聊按钮 */
   onClickCreate?: () => void;
+  /** 点击加入群组按钮 */
+  onClickJoin?: () => void;
 }
 
 /** 格式化时间为简短展示 */
@@ -38,7 +40,7 @@ function formatTime(dateStr?: string): string {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
-export default function ConversationList({ conversations, onClickCreate }: ConversationListProps) {
+export default function ConversationList({ conversations, onClickCreate, onClickJoin }: ConversationListProps) {
   const pathname = usePathname();
   const [searchText, setSearchText] = useState("");
 
@@ -53,14 +55,24 @@ export default function ConversationList({ conversations, onClickCreate }: Conve
       {/* 顶部标题栏 */}
       <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 border-b border-panel-border">
         <h2 className="text-base font-semibold text-text-primary">消息</h2>
-        <button
-          onClick={onClickCreate}
-          className="w-7 h-7 rounded-md flex items-center justify-center text-text-secondary
-            hover:bg-list-hover transition-colors"
-          title="创建群聊"
-        >
-          <Plus size={18} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onClickJoin}
+            className="w-7 h-7 rounded-md flex items-center justify-center text-text-secondary
+              hover:bg-list-hover transition-colors"
+            title="加入群组"
+          >
+            <UserPlus size={16} />
+          </button>
+          <button
+            onClick={onClickCreate}
+            className="w-7 h-7 rounded-md flex items-center justify-center text-text-secondary
+              hover:bg-list-hover transition-colors"
+            title="创建群聊"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
       </div>
 
       {/* 搜索框 */}

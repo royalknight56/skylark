@@ -16,7 +16,7 @@ import type { Conversation, Message } from "@/lib/types";
 export default function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { user } = useAuth();
-  const { conversations } = useMessages();
+  const { conversations, refreshConversations } = useMessages();
 
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -73,6 +73,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       initialMessages={messages}
       currentUserId={user?.id || ""}
       memberCount={4}
+      onMarkRead={refreshConversations}
     />
   );
 }

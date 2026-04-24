@@ -31,6 +31,10 @@ import type {
   MeetingRoom,
   EmployeeType,
   MemberStatus,
+  AdminRole,
+  AdminRoleMember,
+  MessageReadInfo,
+  MessageReaction,
 } from '../types';
 
 /* ==================== 企业/组织查询 ==================== */
@@ -217,7 +221,7 @@ export async function findDirectConversation(
   return row?.id ?? null;
 }
 
-/** 获取用户在某企业下的所有会话 */
+/** 获取用户在某企业下的所有会话（含未读消息计数） */
 export async function getUserConversations(
   db: D1Database,
   userId: string,
@@ -228,28 +232,34 @@ export async function getUserConversations(
       `SELECT c.*,
         m.content as last_message,
         m.created_at as last_message_at,
-        /* 私聊时取对方的名字和头像 */
+        m.recalled as last_message_recalled,
         peer.name as peer_name,
-        peer.avatar_url as peer_avatar
+        peer.avatar_url as peer_avatar,
+        (SELECT COUNT(*) FROM messages msg
+         WHERE msg.conversation_id = c.id
+           AND msg.sender_id != ?
+           AND msg.id NOT IN (SELECT mr.message_id FROM message_reads mr WHERE mr.user_id = ?)
+        ) as unread_count
       FROM conversations c
       JOIN conversation_members cm ON c.id = cm.conversation_id
       LEFT JOIN messages m ON m.id = (
         SELECT id FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1
       )
-      /* 私聊对方：同会话中另一个成员 */
       LEFT JOIN conversation_members cm2
         ON c.id = cm2.conversation_id AND cm2.user_id != ? AND c.type = 'direct'
       LEFT JOIN users peer ON cm2.user_id = peer.id
       WHERE cm.user_id = ? AND c.org_id = ?
       ORDER BY COALESCE(m.created_at, c.updated_at) DESC`
     )
-    .bind(userId, userId, orgId)
-    .all<Conversation & { peer_name: string | null; peer_avatar: string | null }>();
+    .bind(userId, userId, userId, userId, orgId)
+    .all<Conversation & { peer_name: string | null; peer_avatar: string | null; unread_count: number; last_message_recalled: number | null }>();
 
   return result.results.map((row) => ({
     ...row,
     name: row.name || row.peer_name || null,
     avatar_url: row.avatar_url || row.peer_avatar || null,
+    last_message: row.last_message_recalled ? '撤回了一条消息' : row.last_message,
+    unread_count: row.unread_count || 0,
   }));
 }
 
@@ -306,7 +316,7 @@ export async function getConversationMembers(
   return result.results;
 }
 
-/** 创建新会话 */
+/** 创建新会话（支持群描述、公开群设置） */
 export async function createConversation(
   db: D1Database,
   id: string,
@@ -314,13 +324,15 @@ export async function createConversation(
   type: 'direct' | 'group',
   name: string | null,
   createdBy: string,
-  memberIds: string[]
+  memberIds: string[],
+  options?: { description?: string; is_public?: boolean }
 ): Promise<Conversation> {
   await db
     .prepare(
-      'INSERT INTO conversations (id, org_id, type, name, created_by) VALUES (?, ?, ?, ?, ?)'
+      `INSERT INTO conversations (id, org_id, type, name, description, is_public, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind(id, orgId, type, name, createdBy)
+    .bind(id, orgId, type, name, options?.description || null, options?.is_public ? 1 : 0, createdBy)
     .run();
 
   const stmts = memberIds.map((uid) =>
@@ -335,6 +347,149 @@ export async function createConversation(
   return (await getConversation(db, id))!;
 }
 
+/** 更新群组信息（群名、描述、头像、公开/私有） */
+export async function updateConversation(
+  db: D1Database,
+  conversationId: string,
+  updates: { name?: string; description?: string; avatar_url?: string; is_public?: boolean }
+): Promise<void> {
+  const setClauses: string[] = [];
+  const values: (string | number)[] = [];
+
+  if (updates.name !== undefined) { setClauses.push('name = ?'); values.push(updates.name); }
+  if (updates.description !== undefined) { setClauses.push('description = ?'); values.push(updates.description); }
+  if (updates.avatar_url !== undefined) { setClauses.push('avatar_url = ?'); values.push(updates.avatar_url); }
+  if (updates.is_public !== undefined) { setClauses.push('is_public = ?'); values.push(updates.is_public ? 1 : 0); }
+
+  if (setClauses.length === 0) return;
+
+  setClauses.push('updated_at = CURRENT_TIMESTAMP');
+  values.push(conversationId);
+
+  await db
+    .prepare(`UPDATE conversations SET ${setClauses.join(', ')} WHERE id = ?`)
+    .bind(...values)
+    .run();
+}
+
+/** 生成/更新群组邀请码 */
+export async function generateInviteCode(
+  db: D1Database,
+  conversationId: string,
+  expireDays = 7
+): Promise<string> {
+  const code = `g-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const expireAt = new Date(Date.now() + expireDays * 24 * 60 * 60 * 1000).toISOString();
+  await db
+    .prepare('UPDATE conversations SET invite_code = ?, invite_expire_at = ? WHERE id = ?')
+    .bind(code, expireAt, conversationId)
+    .run();
+  return code;
+}
+
+/** 通过邀请码查找群组 */
+export async function getConversationByInviteCode(
+  db: D1Database,
+  inviteCode: string
+): Promise<Conversation | null> {
+  return db
+    .prepare('SELECT * FROM conversations WHERE invite_code = ?')
+    .bind(inviteCode)
+    .first<Conversation>();
+}
+
+/** 搜索公开群组（同一企业内） */
+export async function searchPublicGroups(
+  db: D1Database,
+  orgId: string,
+  keyword: string
+): Promise<(Conversation & { member_count: number })[]> {
+  const result = await db
+    .prepare(
+      `SELECT c.*,
+        (SELECT COUNT(*) FROM conversation_members cm WHERE cm.conversation_id = c.id) as member_count
+       FROM conversations c
+       WHERE c.org_id = ? AND c.type = 'group' AND c.is_public = 1
+         AND (c.name LIKE ? OR c.description LIKE ?)
+       ORDER BY c.updated_at DESC LIMIT 20`
+    )
+    .bind(orgId, `%${keyword}%`, `%${keyword}%`)
+    .all<Conversation & { member_count: number }>();
+  return result.results;
+}
+
+/** 添加成员到会话（单个） */
+export async function addConversationMember(
+  db: D1Database,
+  conversationId: string,
+  userId: string,
+  role = 'member'
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('INSERT OR IGNORE INTO conversation_members (conversation_id, user_id, role) VALUES (?, ?, ?)')
+      .bind(conversationId, userId, role)
+      .run();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 批量添加成员到群组 */
+export async function batchAddConversationMembers(
+  db: D1Database,
+  conversationId: string,
+  userIds: string[]
+): Promise<number> {
+  if (userIds.length === 0) return 0;
+  const stmts = userIds.map((uid) =>
+    db
+      .prepare('INSERT OR IGNORE INTO conversation_members (conversation_id, user_id, role) VALUES (?, ?, ?)')
+      .bind(conversationId, uid, 'member')
+  );
+  await db.batch(stmts);
+  return userIds.length;
+}
+
+/** 移除群成员 */
+export async function removeConversationMember(
+  db: D1Database,
+  conversationId: string,
+  userId: string
+): Promise<void> {
+  await db
+    .prepare('DELETE FROM conversation_members WHERE conversation_id = ? AND user_id = ?')
+    .bind(conversationId, userId)
+    .run();
+}
+
+/** 检查用户是否为群成员 */
+export async function isConversationMember(
+  db: D1Database,
+  conversationId: string,
+  userId: string
+): Promise<boolean> {
+  const row = await db
+    .prepare('SELECT 1 FROM conversation_members WHERE conversation_id = ? AND user_id = ?')
+    .bind(conversationId, userId)
+    .first();
+  return !!row;
+}
+
+/** 获取群成员角色 */
+export async function getConversationMemberRole(
+  db: D1Database,
+  conversationId: string,
+  userId: string
+): Promise<string | null> {
+  const row = await db
+    .prepare('SELECT role FROM conversation_members WHERE conversation_id = ? AND user_id = ?')
+    .bind(conversationId, userId)
+    .first<{ role: string }>();
+  return row?.role ?? null;
+}
+
 /* ==================== 消息查询 ==================== */
 
 /** 获取会话消息（分页） */
@@ -342,15 +497,22 @@ export async function getMessages(
   db: D1Database,
   conversationId: string,
   limit = 50,
-  before?: string
+  before?: string,
+  currentUserId?: string
 ): Promise<Message[]> {
   const query = before
-    ? `SELECT m.*, u.name as sender_name, u.avatar_url as sender_avatar
-       FROM messages m JOIN users u ON m.sender_id = u.id
+    ? `SELECT m.*, u.name as sender_name, u.avatar_url as sender_avatar,
+              ru.name as recaller_name
+       FROM messages m
+       JOIN users u ON m.sender_id = u.id
+       LEFT JOIN users ru ON m.recalled_by = ru.id
        WHERE m.conversation_id = ? AND m.created_at < ?
        ORDER BY m.created_at DESC LIMIT ?`
-    : `SELECT m.*, u.name as sender_name, u.avatar_url as sender_avatar
-       FROM messages m JOIN users u ON m.sender_id = u.id
+    : `SELECT m.*, u.name as sender_name, u.avatar_url as sender_avatar,
+              ru.name as recaller_name
+       FROM messages m
+       JOIN users u ON m.sender_id = u.id
+       LEFT JOIN users ru ON m.recalled_by = ru.id
        WHERE m.conversation_id = ?
        ORDER BY m.created_at DESC LIMIT ?`;
 
@@ -361,10 +523,17 @@ export async function getMessages(
   const result = await db
     .prepare(query)
     .bind(...binds)
-    .all<Message & { sender_name: string; sender_avatar: string | null }>();
+    .all<Message & { sender_name: string; sender_avatar: string | null; recaller_name: string | null }>();
 
-  return result.results.reverse().map((row) => ({
+  const messages = result.results.reverse();
+
+  // 批量获取表情回复
+  const msgIds = messages.map((m) => m.id);
+  const reactionsMap = await getBatchMessageReactions(db, msgIds, currentUserId);
+
+  return messages.map((row) => ({
     ...row,
+    recalled: !!row.recalled,
     sender: {
       id: row.sender_id,
       email: '',
@@ -374,6 +543,16 @@ export async function getMessages(
       current_org_id: null,
       created_at: '',
     },
+    recaller: row.recalled_by ? {
+      id: row.recalled_by,
+      email: '',
+      name: row.recaller_name || '用户',
+      avatar_url: null,
+      status: 'online' as const,
+      current_org_id: null,
+      created_at: '',
+    } : undefined,
+    reactions: reactionsMap.get(row.id) || [],
   }));
 }
 
@@ -430,6 +609,238 @@ export async function createMessage(
       created_at: '',
     },
   } as Message;
+}
+
+/** 撤回消息 */
+export async function recallMessage(
+  db: D1Database,
+  messageId: string,
+  recalledBy: string
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `UPDATE messages SET recalled = 1, recalled_by = ?, recalled_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND recalled = 0`
+    )
+    .bind(recalledBy, messageId)
+    .run();
+  return (result.meta?.changes ?? 0) > 0;
+}
+
+/** 获取单条消息（用于撤回权限检查） */
+export async function getMessage(
+  db: D1Database,
+  messageId: string
+): Promise<Message | null> {
+  return db
+    .prepare('SELECT * FROM messages WHERE id = ?')
+    .bind(messageId)
+    .first<Message>();
+}
+
+/* ==================== 消息已读 ==================== */
+
+/**
+ * 标记会话已读：将该会话中所有早于当前时间、
+ * 非自己发的、还未读的消息批量插入 message_reads，
+ * 同时更新 conversation_members.last_read_at
+ */
+export async function markConversationRead(
+  db: D1Database,
+  conversationId: string,
+  userId: string
+): Promise<number> {
+  // 批量插入已读记录（排除自己发的和已读的）
+  const result = await db
+    .prepare(
+      `INSERT OR IGNORE INTO message_reads (message_id, user_id)
+       SELECT m.id, ?
+       FROM messages m
+       WHERE m.conversation_id = ?
+         AND m.sender_id != ?
+         AND m.id NOT IN (SELECT mr.message_id FROM message_reads mr WHERE mr.user_id = ?)`
+    )
+    .bind(userId, conversationId, userId, userId)
+    .run();
+
+  // 更新 last_read_at
+  await db
+    .prepare(
+      `UPDATE conversation_members SET last_read_at = CURRENT_TIMESTAMP
+       WHERE conversation_id = ? AND user_id = ?`
+    )
+    .bind(conversationId, userId)
+    .run();
+
+  return result.meta?.changes ?? 0;
+}
+
+/** 获取某条消息的已读用户列表 */
+export async function getMessageReaders(
+  db: D1Database,
+  messageId: string
+): Promise<MessageReadInfo[]> {
+  const result = await db
+    .prepare(
+      `SELECT mr.user_id, mr.read_at, u.name, u.avatar_url
+       FROM message_reads mr
+       JOIN users u ON mr.user_id = u.id
+       WHERE mr.message_id = ?
+       ORDER BY mr.read_at`
+    )
+    .bind(messageId)
+    .all<{ user_id: string; read_at: string; name: string; avatar_url: string | null }>();
+
+  return result.results.map((r) => ({
+    user_id: r.user_id,
+    read_at: r.read_at,
+    user: {
+      id: r.user_id,
+      email: '',
+      name: r.name,
+      avatar_url: r.avatar_url,
+      status: 'online' as const,
+      current_org_id: null,
+      created_at: '',
+    },
+  }));
+}
+
+/** 获取某条消息的已读人数 */
+export async function getMessageReadCount(
+  db: D1Database,
+  messageId: string
+): Promise<number> {
+  const row = await db
+    .prepare('SELECT COUNT(*) as cnt FROM message_reads WHERE message_id = ?')
+    .bind(messageId)
+    .first<{ cnt: number }>();
+  return row?.cnt ?? 0;
+}
+
+/** 获取用户在某个会话中的未读消息数 */
+export async function getUnreadCount(
+  db: D1Database,
+  conversationId: string,
+  userId: string
+): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) as cnt FROM messages m
+       WHERE m.conversation_id = ?
+         AND m.sender_id != ?
+         AND m.id NOT IN (SELECT mr.message_id FROM message_reads mr WHERE mr.user_id = ?)`
+    )
+    .bind(conversationId, userId, userId)
+    .first<{ cnt: number }>();
+  return row?.cnt ?? 0;
+}
+
+/* ==================== 消息表情回复 ==================== */
+
+/**
+ * 切换表情回复：已存在则删除，不存在则添加
+ * 返回 'added' | 'removed'
+ */
+export async function toggleReaction(
+  db: D1Database,
+  messageId: string,
+  userId: string,
+  emoji: string
+): Promise<'added' | 'removed'> {
+  const existing = await db
+    .prepare('SELECT id FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?')
+    .bind(messageId, userId, emoji)
+    .first<{ id: string }>();
+
+  if (existing) {
+    await db.prepare('DELETE FROM message_reactions WHERE id = ?').bind(existing.id).run();
+    return 'removed';
+  }
+
+  const id = `mr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  await db
+    .prepare('INSERT INTO message_reactions (id, message_id, user_id, emoji) VALUES (?, ?, ?, ?)')
+    .bind(id, messageId, userId, emoji)
+    .run();
+  return 'added';
+}
+
+/** 获取某条消息的表情回复列表（按 emoji 分组聚合） */
+export async function getMessageReactions(
+  db: D1Database,
+  messageId: string,
+  currentUserId?: string
+): Promise<MessageReaction[]> {
+  const result = await db
+    .prepare(
+      `SELECT mr.emoji, mr.user_id, u.name
+       FROM message_reactions mr
+       JOIN users u ON mr.user_id = u.id
+       WHERE mr.message_id = ?
+       ORDER BY mr.created_at`
+    )
+    .bind(messageId)
+    .all<{ emoji: string; user_id: string; name: string }>();
+
+  // 按 emoji 聚合
+  const emojiMap = new Map<string, MessageReaction>();
+  for (const row of result.results) {
+    let entry = emojiMap.get(row.emoji);
+    if (!entry) {
+      entry = { emoji: row.emoji, count: 0, users: [], is_self: false };
+      emojiMap.set(row.emoji, entry);
+    }
+    entry.count++;
+    entry.users.push({ user_id: row.user_id, name: row.name });
+    if (currentUserId && row.user_id === currentUserId) {
+      entry.is_self = true;
+    }
+  }
+  return Array.from(emojiMap.values());
+}
+
+/** 批量获取多条消息的表情回复（用于消息列表加载） */
+export async function getBatchMessageReactions(
+  db: D1Database,
+  messageIds: string[],
+  currentUserId?: string
+): Promise<Map<string, MessageReaction[]>> {
+  if (messageIds.length === 0) return new Map();
+
+  const placeholders = messageIds.map(() => '?').join(',');
+  const result = await db
+    .prepare(
+      `SELECT mr.message_id, mr.emoji, mr.user_id, u.name
+       FROM message_reactions mr
+       JOIN users u ON mr.user_id = u.id
+       WHERE mr.message_id IN (${placeholders})
+       ORDER BY mr.created_at`
+    )
+    .bind(...messageIds)
+    .all<{ message_id: string; emoji: string; user_id: string; name: string }>();
+
+  const map = new Map<string, Map<string, MessageReaction>>();
+  for (const row of result.results) {
+    if (!map.has(row.message_id)) map.set(row.message_id, new Map());
+    const emojiMap = map.get(row.message_id)!;
+    let entry = emojiMap.get(row.emoji);
+    if (!entry) {
+      entry = { emoji: row.emoji, count: 0, users: [], is_self: false };
+      emojiMap.set(row.emoji, entry);
+    }
+    entry.count++;
+    entry.users.push({ user_id: row.user_id, name: row.name });
+    if (currentUserId && row.user_id === currentUserId) {
+      entry.is_self = true;
+    }
+  }
+
+  const finalMap = new Map<string, MessageReaction[]>();
+  for (const [msgId, emojiMap] of map) {
+    finalMap.set(msgId, Array.from(emojiMap.values()));
+  }
+  return finalMap;
 }
 
 /* ==================== 通讯录查询 ==================== */
@@ -829,15 +1240,25 @@ export async function updateDocument(
 export async function updateOrganization(
   db: D1Database,
   orgId: string,
-  fields: { name?: string; description?: string; logo_url?: string; require_approval?: boolean }
+  fields: {
+    name?: string; description?: string; logo_url?: string; require_approval?: boolean;
+    industry?: string | null; address?: string | null; website?: string | null;
+    contact_name?: string | null; contact_email?: string | null; contact_phone?: string | null;
+  }
 ): Promise<Organization | null> {
   const sets: string[] = [];
-  const values: (string | number)[] = [];
+  const values: (string | number | null)[] = [];
 
   if (fields.name !== undefined) { sets.push('name = ?'); values.push(fields.name); }
   if (fields.description !== undefined) { sets.push('description = ?'); values.push(fields.description); }
   if (fields.logo_url !== undefined) { sets.push('logo_url = ?'); values.push(fields.logo_url); }
   if (fields.require_approval !== undefined) { sets.push('require_approval = ?'); values.push(fields.require_approval ? 1 : 0); }
+  if (fields.industry !== undefined) { sets.push('industry = ?'); values.push(fields.industry); }
+  if (fields.address !== undefined) { sets.push('address = ?'); values.push(fields.address); }
+  if (fields.website !== undefined) { sets.push('website = ?'); values.push(fields.website); }
+  if (fields.contact_name !== undefined) { sets.push('contact_name = ?'); values.push(fields.contact_name); }
+  if (fields.contact_email !== undefined) { sets.push('contact_email = ?'); values.push(fields.contact_email); }
+  if (fields.contact_phone !== undefined) { sets.push('contact_phone = ?'); values.push(fields.contact_phone); }
 
   if (sets.length === 0) return getOrganization(db, orgId);
 
@@ -955,6 +1376,8 @@ export async function getInviteById(
       id: row.org_id, name: row.org_name, logo_url: row.org_logo,
       description: row.org_desc, invite_code: row.org_invite_code,
       owner_id: row.org_owner_id, require_approval: false,
+      industry: null, address: null, website: null,
+      contact_name: null, contact_email: null, contact_phone: null,
       created_at: '', member_count: row.org_member_count,
     },
   };
@@ -1741,6 +2164,10 @@ export async function getBotSubscriptions(
       type: row.conv_type as 'direct' | 'group',
       name: row.conv_name,
       avatar_url: null,
+      description: null,
+      is_public: false,
+      invite_code: null,
+      invite_expire_at: null,
       created_by: '',
       created_at: '',
       updated_at: '',
@@ -1859,6 +2286,9 @@ export async function createBotMessage(
     content: msg.content,
     type: (msg.type || 'text') as Message['type'],
     reply_to: null,
+    recalled: false,
+    recalled_by: null,
+    recalled_at: null,
     created_at: new Date().toISOString(),
     updated_at: null,
     sender: {
@@ -2337,6 +2767,190 @@ export async function updateBaseView(db: D1Database, viewId: string, data: { nam
 /** 删除视图 */
 export async function deleteBaseView(db: D1Database, viewId: string) {
   await db.prepare('DELETE FROM base_views WHERE id = ?').bind(viewId).run();
+}
+
+// ─── 管理员角色 ──────────────────────────────────
+
+/** 获取企业所有管理员角色 */
+export async function getAdminRoles(db: D1Database, orgId: string): Promise<AdminRole[]> {
+  const rows = await db
+    .prepare(
+      `SELECT ar.*,
+              (SELECT COUNT(*) FROM admin_role_members WHERE role_id = ar.id) AS member_count,
+              pr.name AS parent_name
+       FROM admin_roles ar
+       LEFT JOIN admin_roles pr ON ar.parent_role_id = pr.id
+       WHERE ar.org_id = ?
+       ORDER BY ar.created_at`
+    )
+    .bind(orgId)
+    .all<AdminRole & { member_count: number; parent_name: string | null }>();
+
+  return rows.results.map((r) => ({
+    ...r,
+    permissions: typeof r.permissions === 'string' ? JSON.parse(r.permissions as string) : r.permissions,
+    can_delegate: !!r.can_delegate,
+  }));
+}
+
+/** 获取单个管理员角色 */
+export async function getAdminRole(db: D1Database, roleId: string): Promise<AdminRole | null> {
+  const row = await db
+    .prepare(
+      `SELECT ar.*,
+              (SELECT COUNT(*) FROM admin_role_members WHERE role_id = ar.id) AS member_count,
+              pr.name AS parent_name
+       FROM admin_roles ar
+       LEFT JOIN admin_roles pr ON ar.parent_role_id = pr.id
+       WHERE ar.id = ?`
+    )
+    .bind(roleId)
+    .first<AdminRole & { parent_name: string | null }>();
+
+  if (!row) return null;
+  return {
+    ...row,
+    permissions: typeof row.permissions === 'string' ? JSON.parse(row.permissions as string) : row.permissions,
+    can_delegate: !!row.can_delegate,
+  };
+}
+
+/** 创建管理员角色 */
+export async function createAdminRole(
+  db: D1Database,
+  role: { id: string; org_id: string; name: string; description?: string; parent_role_id?: string; permissions: string[]; can_delegate?: boolean }
+): Promise<AdminRole> {
+  await db
+    .prepare(
+      `INSERT INTO admin_roles (id, org_id, name, description, parent_role_id, permissions, can_delegate)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      role.id, role.org_id, role.name,
+      role.description || null,
+      role.parent_role_id || null,
+      JSON.stringify(role.permissions),
+      role.can_delegate ? 1 : 0
+    )
+    .run();
+
+  return (await getAdminRole(db, role.id))!;
+}
+
+/** 更新管理员角色 */
+export async function updateAdminRole(
+  db: D1Database,
+  roleId: string,
+  fields: { name?: string; description?: string | null; permissions?: string[]; can_delegate?: boolean }
+): Promise<AdminRole | null> {
+  const sets: string[] = [];
+  const vals: (string | number | null)[] = [];
+
+  if (fields.name !== undefined) { sets.push('name = ?'); vals.push(fields.name); }
+  if (fields.description !== undefined) { sets.push('description = ?'); vals.push(fields.description); }
+  if (fields.permissions !== undefined) { sets.push('permissions = ?'); vals.push(JSON.stringify(fields.permissions)); }
+  if (fields.can_delegate !== undefined) { sets.push('can_delegate = ?'); vals.push(fields.can_delegate ? 1 : 0); }
+
+  if (sets.length === 0) return getAdminRole(db, roleId);
+
+  vals.push(roleId);
+  await db.prepare(`UPDATE admin_roles SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
+
+  return getAdminRole(db, roleId);
+}
+
+/** 删除管理员角色 */
+export async function deleteAdminRole(db: D1Database, roleId: string) {
+  // 子角色清除父级引用
+  await db.prepare('UPDATE admin_roles SET parent_role_id = NULL WHERE parent_role_id = ?').bind(roleId).run();
+  await db.prepare('DELETE FROM admin_roles WHERE id = ?').bind(roleId).run();
+}
+
+/** 获取角色的成员列表 */
+export async function getAdminRoleMembers(db: D1Database, roleId: string): Promise<AdminRoleMember[]> {
+  const rows = await db
+    .prepare(
+      `SELECT arm.*, u.name, u.email, u.avatar_url, u.status
+       FROM admin_role_members arm
+       JOIN users u ON arm.user_id = u.id
+       WHERE arm.role_id = ?
+       ORDER BY arm.added_at`
+    )
+    .bind(roleId)
+    .all<AdminRoleMember & { name: string; email: string; avatar_url: string | null; status: string }>();
+
+  return rows.results.map((r) => ({
+    role_id: r.role_id,
+    user_id: r.user_id,
+    added_at: r.added_at,
+    user: { id: r.user_id, email: r.email, name: r.name, avatar_url: r.avatar_url, status: r.status as User['status'], current_org_id: null, created_at: '' },
+  }));
+}
+
+/** 向角色添加管理员成员 */
+export async function addAdminRoleMember(db: D1Database, roleId: string, userId: string) {
+  await db
+    .prepare('INSERT OR IGNORE INTO admin_role_members (role_id, user_id) VALUES (?, ?)')
+    .bind(roleId, userId)
+    .run();
+  // 同时确保 org_members.role 为 admin
+  const role = await getAdminRole(db, roleId);
+  if (role) {
+    await db
+      .prepare("UPDATE org_members SET role = 'admin' WHERE org_id = ? AND user_id = ? AND role = 'member'")
+      .bind(role.org_id, userId)
+      .run();
+  }
+}
+
+/** 从角色移除管理员成员 */
+export async function removeAdminRoleMember(db: D1Database, roleId: string, userId: string) {
+  await db
+    .prepare('DELETE FROM admin_role_members WHERE role_id = ? AND user_id = ?')
+    .bind(roleId, userId)
+    .run();
+  // 如果该用户不再属于任何角色，降级为 member
+  const role = await getAdminRole(db, roleId);
+  if (role) {
+    const remaining = await db
+      .prepare(
+        `SELECT 1 FROM admin_role_members arm
+         JOIN admin_roles ar ON arm.role_id = ar.id
+         WHERE arm.user_id = ? AND ar.org_id = ?`
+      )
+      .bind(userId, role.org_id)
+      .first();
+    if (!remaining) {
+      await db
+        .prepare("UPDATE org_members SET role = 'member' WHERE org_id = ? AND user_id = ? AND role = 'admin'")
+        .bind(role.org_id, userId)
+        .run();
+    }
+  }
+}
+
+/** 获取用户在企业中的所有管理员权限 */
+export async function getUserAdminPermissions(
+  db: D1Database,
+  orgId: string,
+  userId: string
+): Promise<string[]> {
+  const rows = await db
+    .prepare(
+      `SELECT DISTINCT ar.permissions
+       FROM admin_role_members arm
+       JOIN admin_roles ar ON arm.role_id = ar.id
+       WHERE ar.org_id = ? AND arm.user_id = ?`
+    )
+    .bind(orgId, userId)
+    .all<{ permissions: string }>();
+
+  const perms = new Set<string>();
+  for (const row of rows.results) {
+    const parsed: string[] = typeof row.permissions === 'string' ? JSON.parse(row.permissions) : row.permissions;
+    for (const p of parsed) perms.add(p);
+  }
+  return Array.from(perms);
 }
 
 // ─── 成员排序 ─────────────────────────────────

@@ -5,7 +5,8 @@
  * @author skylark
  */
 
-import type { User, OrgMemberRole } from './types';
+import type { User, OrgMemberRole, AdminPermission } from './types';
+import { getUserAdminPermissions } from './db/queries';
 import { cookies } from 'next/headers';
 
 /** cookie 名 */
@@ -73,6 +74,29 @@ export async function requireOwner(
   const role = await getOrgRole(db, orgId, userId);
   if (role !== 'owner') return null;
   return role;
+}
+
+/**
+ * 校验管理后台权限：owner 拥有全部权限；admin 按角色检查具体权限点
+ * 通过则返回用户角色，否则返回 null
+ */
+export async function requireAdmin(
+  db: D1Database,
+  orgId: string,
+  userId: string,
+  permission?: AdminPermission
+): Promise<OrgMemberRole | null> {
+  const role = await getOrgRole(db, orgId, userId);
+  if (!role) return null;
+  // owner 拥有全部权限
+  if (role === 'owner') return role;
+  // admin 需检查角色权限
+  if (role === 'admin') {
+    if (!permission) return role;
+    const perms = await getUserAdminPermissions(db, orgId, userId);
+    return perms.includes(permission) ? role : null;
+  }
+  return null;
 }
 
 /** 确保用户存在于数据库中（upsert） */

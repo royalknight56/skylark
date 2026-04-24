@@ -42,6 +42,12 @@ export async function PUT(request: NextRequest) {
       logo_url?: string;
       require_approval?: boolean;
       regenerate_invite_code?: boolean;
+      industry?: string | null;
+      address?: string | null;
+      website?: string | null;
+      contact_name?: string | null;
+      contact_email?: string | null;
+      contact_phone?: string | null;
     };
 
     if (!body.org_id) {
@@ -72,6 +78,12 @@ export async function PUT(request: NextRequest) {
       description: body.description,
       logo_url: body.logo_url,
       require_approval: body.require_approval,
+      industry: body.industry,
+      address: body.address,
+      website: body.website,
+      contact_name: body.contact_name,
+      contact_email: body.contact_email,
+      contact_phone: body.contact_phone,
     });
 
     await createAdminLog(env.DB, {

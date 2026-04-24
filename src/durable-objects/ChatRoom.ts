@@ -140,6 +140,21 @@ export class ChatRoom extends DurableObject<CloudflareEnv> {
             meta.userId
           );
           break;
+
+        case "recall":
+          // 广播撤回事件给所有用户
+          this.broadcast(
+            JSON.stringify({
+              type: "recall",
+              payload: {
+                messageId: data.payload?.messageId,
+                recalledBy: meta.userId,
+                recallerName: meta.userName,
+              },
+              timestamp: new Date().toISOString(),
+            })
+          );
+          break;
       }
     } catch {
       // 忽略无效消息

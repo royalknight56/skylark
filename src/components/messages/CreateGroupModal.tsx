@@ -39,6 +39,8 @@ export default function CreateGroupModal({
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [groupName, setGroupName] = useState("");
+  const [groupDesc, setGroupDesc] = useState("");
+  const [isPublic, setIsPublic] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -66,6 +68,8 @@ export default function CreateGroupModal({
     if (open) {
       setSelected(new Set());
       setGroupName("");
+      setGroupDesc("");
+      setIsPublic(false);
       setSearchText("");
       fetchMembers();
     }
@@ -128,6 +132,8 @@ export default function CreateGroupModal({
           org_id: currentOrg.id,
           type: "group",
           name: groupName.trim() || defaultGroupName,
+          description: groupDesc.trim() || undefined,
+          is_public: isPublic,
           member_ids: Array.from(selected),
         }),
       });
@@ -182,6 +188,36 @@ export default function CreateGroupModal({
               text-text-primary placeholder:text-text-placeholder
               focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
+        </div>
+
+        {/* 群描述 */}
+        <div className="px-5 pb-2 shrink-0">
+          <label className="block text-xs text-text-secondary mb-1.5">
+            群描述（可选）
+          </label>
+          <input
+            value={groupDesc}
+            onChange={(e) => setGroupDesc(e.target.value)}
+            placeholder="输入群描述…"
+            maxLength={100}
+            className="w-full h-9 px-3 rounded-lg bg-bg-page border border-panel-border text-sm
+              text-text-primary placeholder:text-text-placeholder
+              focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+
+        {/* 公开群切换 */}
+        <div className="px-5 pb-2 shrink-0 flex items-center justify-between">
+          <div>
+            <p className="text-sm text-text-primary">设为公开群</p>
+            <p className="text-xs text-text-placeholder">企业成员可通过搜索加入</p>
+          </div>
+          <button
+            onClick={() => setIsPublic(!isPublic)}
+            className={`w-10 h-5.5 rounded-full transition-colors relative ${isPublic ? "bg-primary" : "bg-gray-300"}`}
+          >
+            <span className={`absolute top-0.5 w-4.5 h-4.5 rounded-full bg-white shadow transition-transform ${isPublic ? "translate-x-5" : "translate-x-0.5"}`} />
+          </button>
         </div>
 
         {/* 已选成员预览 */}

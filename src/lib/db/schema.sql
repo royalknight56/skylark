@@ -9,6 +9,12 @@ CREATE TABLE IF NOT EXISTS organizations (
   name TEXT NOT NULL,
   logo_url TEXT,
   description TEXT,
+  industry TEXT,
+  address TEXT,
+  website TEXT,
+  contact_name TEXT,
+  contact_email TEXT,
+  contact_phone TEXT,
   invite_code TEXT UNIQUE,
   owner_id TEXT NOT NULL,
   require_approval BOOLEAN DEFAULT 0,
@@ -138,6 +144,10 @@ CREATE TABLE IF NOT EXISTS conversations (
   type TEXT NOT NULL CHECK(type IN ('direct', 'group')),
   name TEXT,
   avatar_url TEXT,
+  description TEXT,
+  is_public BOOLEAN DEFAULT 0,
+  invite_code TEXT UNIQUE,
+  invite_expire_at DATETIME,
   created_by TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -169,6 +179,9 @@ CREATE TABLE IF NOT EXISTS messages (
   file_size INTEGER,
   file_mime TEXT,
   file_r2_key TEXT,
+  recalled BOOLEAN DEFAULT 0,
+  recalled_by TEXT,
+  recalled_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME,
   FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
@@ -177,6 +190,32 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_conv_time ON messages(conversation_id, created_at DESC);
+
+-- 消息已读记录表
+CREATE TABLE IF NOT EXISTS message_reads (
+  message_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  read_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (message_id, user_id),
+  FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_message_reads_user ON message_reads(user_id, read_at DESC);
+
+-- 消息表情回复表
+CREATE TABLE IF NOT EXISTS message_reactions (
+  id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  emoji TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(message_id, user_id, emoji)
+);
+
+CREATE INDEX IF NOT EXISTS idx_message_reactions_msg ON message_reactions(message_id);
 
 -- ==================== 机器人 ====================
 
@@ -367,3 +406,29 @@ CREATE TABLE IF NOT EXISTS base_views (
 );
 
 CREATE INDEX IF NOT EXISTS idx_base_views_table ON base_views(table_id);
+
+-- 管理员角色表
+CREATE TABLE IF NOT EXISTS admin_roles (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  parent_role_id TEXT,
+  permissions TEXT DEFAULT '[]',
+  can_delegate BOOLEAN DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (parent_role_id) REFERENCES admin_roles(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_roles_org ON admin_roles(org_id);
+
+-- 管理员角色成员表
+CREATE TABLE IF NOT EXISTS admin_role_members (
+  role_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (role_id, user_id),
+  FOREIGN KEY (role_id) REFERENCES admin_roles(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);

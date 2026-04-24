@@ -12,6 +12,12 @@ export interface Organization {
   name: string;
   logo_url: string | null;
   description: string | null;
+  industry: string | null;
+  address: string | null;
+  website: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
   invite_code: string | null;
   owner_id: string;
   require_approval: boolean;
@@ -97,6 +103,10 @@ export interface Conversation {
   type: ConversationType;
   name: string | null;
   avatar_url: string | null;
+  description: string | null;
+  is_public: boolean;
+  invite_code: string | null;
+  invite_expire_at: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -105,6 +115,8 @@ export interface Conversation {
   last_message_at?: string;
   /** 未读消息数 */
   unread_count?: number;
+  /** 成员数（群设置时用） */
+  member_count?: number;
 }
 
 export type MemberRole = 'owner' | 'admin' | 'member';
@@ -128,12 +140,39 @@ export interface Message {
   content: string;
   type: MessageType;
   reply_to: string | null;
+  recalled: boolean;
+  recalled_by: string | null;
+  recalled_at: string | null;
   created_at: string;
   updated_at: string | null;
   /** 前端展示用：发送者信息 */
   sender?: User;
+  /** 撤回者信息（前端展示用） */
+  recaller?: User;
   /** 文件附件信息（type 为 image/file 时） */
   attachment?: FileAttachment;
+  /** 已读人数（群聊时展示） */
+  read_count?: number;
+  /** 当前用户是否已读 / 单聊对方是否已读 */
+  is_read?: boolean;
+  /** 表情回复列表 */
+  reactions?: MessageReaction[];
+}
+
+/** 消息已读用户信息 */
+export interface MessageReadInfo {
+  user_id: string;
+  read_at: string;
+  user?: User;
+}
+
+/** 消息表情回复 */
+export interface MessageReaction {
+  emoji: string;
+  count: number;
+  users: { user_id: string; name: string }[];
+  /** 当前用户是否发送过该表情 */
+  is_self?: boolean;
 }
 
 export interface FileAttachment {
@@ -223,7 +262,9 @@ export type WSMessageType =
   | 'online'
   | 'offline'
   | 'join'
-  | 'leave';
+  | 'leave'
+  | 'recall'
+  | 'reaction';
 
 export interface WSMessage {
   type: WSMessageType;
@@ -455,6 +496,60 @@ export interface BaseView {
   config: BaseViewConfig;
   position: number;
   created_at: string;
+}
+
+/* ==================== 管理员角色与权限 ==================== */
+
+/** 系统预定义的管理权限点 */
+export type AdminPermission =
+  | 'members'         // 成员管理
+  | 'departments'     // 部门管理
+  | 'employee_types'  // 人员类型管理
+  | 'settings'        // 企业设置
+  | 'join_requests'   // 加入审批
+  | 'rooms'           // 会议室管理
+  | 'bots'            // 机器人管理
+  | 'logs'            // 操作日志
+  | 'roles';          // 管理员权限管理
+
+/** 权限点描述 */
+export const ADMIN_PERMISSION_META: Record<AdminPermission, { label: string; desc: string }> = {
+  members:        { label: '成员管理',     desc: '查看和管理企业成员信息、邀请、离职等' },
+  departments:    { label: '部门管理',     desc: '创建、编辑、删除部门，设置部门负责人' },
+  employee_types: { label: '人员类型',     desc: '管理自定义人员类型' },
+  settings:       { label: '企业设置',     desc: '修改企业名称、头像、联系人等基本信息' },
+  join_requests:  { label: '加入审批',     desc: '审批通过邀请码申请加入的请求' },
+  rooms:          { label: '会议室管理',   desc: '管理会议室资源和预定设置' },
+  bots:           { label: '机器人管理',   desc: '管理企业自建机器人' },
+  logs:           { label: '操作日志',     desc: '查看管理后台操作记录' },
+  roles:          { label: '管理员权限',   desc: '创建管理员角色、分配权限和管理员' },
+};
+
+/** 全部权限 key 列表 */
+export const ALL_ADMIN_PERMISSIONS: AdminPermission[] = Object.keys(ADMIN_PERMISSION_META) as AdminPermission[];
+
+/** 管理员角色 */
+export interface AdminRole {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string | null;
+  parent_role_id: string | null;
+  permissions: AdminPermission[];
+  can_delegate: boolean;
+  created_at: string;
+  /** 关联的成员数 */
+  member_count?: number;
+  /** 上级角色名称 */
+  parent_name?: string;
+}
+
+/** 角色成员 */
+export interface AdminRoleMember {
+  role_id: string;
+  user_id: string;
+  added_at: string;
+  user?: User;
 }
 
 /* ==================== API 响应 ==================== */

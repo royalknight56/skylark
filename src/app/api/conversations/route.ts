@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
     const { env } = await getCloudflareContext();
     const body = (await request.json()) as {
       org_id: string; type?: 'direct' | 'group'; name?: string; member_ids?: string[];
+      description?: string; is_public?: boolean;
     };
 
     if (!body.org_id) return NextResponse.json({ success: false, error: "缺少 org_id" }, { status: 400 });
@@ -43,7 +44,8 @@ export async function POST(request: NextRequest) {
     const conversation = await createConversation(
       env.DB, id, body.org_id,
       body.type || "direct", body.name || null,
-      userId, [userId, ...(body.member_ids || [])]
+      userId, [userId, ...(body.member_ids || [])],
+      { description: body.description, is_public: body.is_public }
     );
 
     return NextResponse.json({ success: true, data: conversation }, { status: 201 });

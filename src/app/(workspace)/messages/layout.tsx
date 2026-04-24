@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback, createContext, useContext } from "rea
 import { useRouter } from "next/navigation";
 import ConversationList from "@/components/messages/ConversationList";
 import CreateGroupModal from "@/components/messages/CreateGroupModal";
+import JoinGroupModal from "@/components/messages/JoinGroupModal";
 import { useOrg } from "@/lib/org-context";
 import type { Conversation } from "@/lib/types";
 
@@ -32,6 +33,7 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
   const { currentOrg } = useOrg();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [showJoinGroup, setShowJoinGroup] = useState(false);
 
   const loadConversations = useCallback(async () => {
     if (!currentOrg) return;
@@ -49,12 +51,21 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
       <ConversationList
         conversations={conversations}
         onClickCreate={() => setShowCreateGroup(true)}
+        onClickJoin={() => setShowJoinGroup(true)}
       />
       {children}
       <CreateGroupModal
         open={showCreateGroup}
         onClose={() => setShowCreateGroup(false)}
         onCreated={(convId) => {
+          loadConversations();
+          router.push(`/messages/${convId}`);
+        }}
+      />
+      <JoinGroupModal
+        open={showJoinGroup}
+        onClose={() => setShowJoinGroup(false)}
+        onJoined={(convId) => {
           loadConversations();
           router.push(`/messages/${convId}`);
         }}
