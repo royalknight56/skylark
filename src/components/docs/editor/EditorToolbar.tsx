@@ -74,7 +74,7 @@ export default function EditorToolbar({
 
   const btn = useCallback(
     (active: boolean, onClick: () => void) => ({
-      className: `w-8 h-8 rounded flex items-center justify-center transition-colors
+      className: `w-7 h-7 md:w-8 md:h-8 rounded flex items-center justify-center transition-colors
         ${active
           ? "bg-primary/10 text-primary"
           : "text-text-secondary hover:bg-list-hover hover:text-text-primary"}`,
@@ -93,7 +93,7 @@ export default function EditorToolbar({
     : "正文";
 
   return (
-    <div className="h-10 px-3 flex items-center gap-0.5 border-b border-panel-border shrink-0 overflow-x-auto bg-panel-bg">
+    <div className="h-10 px-1.5 md:px-3 flex items-center gap-0 md:gap-0.5 border-b border-panel-border shrink-0 overflow-x-auto bg-panel-bg">
       {/* 撤销/重做 */}
       <button {...btn(false, () => editor.chain().focus().undo().run())}
         disabled={!editor.can().undo()} title="撤销 (Ctrl+Z)">
@@ -248,11 +248,13 @@ export default function EditorToolbar({
         <AlignRight size={15} />
       </button>
 
-      {/* 缩进 */}
-      <button {...btn(false, () => editor.chain().focus().sinkListItem("listItem").run())} title="增加缩进">
+      {/* 缩进 — 移动端隐藏 */}
+      <button {...btn(false, () => editor.chain().focus().sinkListItem("listItem").run())}
+        title="增加缩进" className="hidden md:flex w-7 h-7 md:w-8 md:h-8 rounded items-center justify-center transition-colors text-text-secondary hover:bg-list-hover hover:text-text-primary">
         <Indent size={15} />
       </button>
-      <button {...btn(false, () => editor.chain().focus().liftListItem("listItem").run())} title="减少缩进">
+      <button {...btn(false, () => editor.chain().focus().liftListItem("listItem").run())}
+        title="减少缩进" className="hidden md:flex w-7 h-7 md:w-8 md:h-8 rounded items-center justify-center transition-colors text-text-secondary hover:bg-list-hover hover:text-text-primary">
         <Outdent size={15} />
       </button>
 
@@ -299,7 +301,9 @@ export default function EditorToolbar({
           </>
         )}
       </div>
-      <button {...btn(false, () => editor.chain().focus().insertColumns(2).run())} title="分栏">
+      {/* 分栏 — 移动端隐藏 */}
+      <button {...btn(false, () => editor.chain().focus().insertColumns(2).run())}
+        title="分栏" className="hidden md:flex w-7 h-7 md:w-8 md:h-8 rounded items-center justify-center transition-colors text-text-secondary hover:bg-list-hover hover:text-text-primary">
         <Columns2 size={15} />
       </button>
       <button {...btn(false, () => editor.chain().focus().insertCallout("info").run())} title="提示块">
@@ -308,20 +312,22 @@ export default function EditorToolbar({
       <button {...btn(false, () => editor.chain().focus().insertDetails().run())} title="折叠块">
         <ChevronRight size={15} />
       </button>
+      {/* 视频/流程图/进度条 — 移动端隐藏 */}
       <button {...btn(false, () => {
         const url = prompt("请输入视频 URL（YouTube / Bilibili）：");
         if (url) editor.chain().focus().insertVideo(url).run();
-      })} title="嵌入视频">
+      })} title="嵌入视频" className="hidden md:flex w-7 h-7 md:w-8 md:h-8 rounded items-center justify-center transition-colors text-text-secondary hover:bg-list-hover hover:text-text-primary">
         <Video size={15} />
       </button>
-      <button {...btn(false, () => editor.chain().focus().insertMermaid().run())} title="流程图">
+      <button {...btn(false, () => editor.chain().focus().insertMermaid().run())}
+        title="流程图" className="hidden md:flex w-7 h-7 md:w-8 md:h-8 rounded items-center justify-center transition-colors text-text-secondary hover:bg-list-hover hover:text-text-primary">
         <GitBranch size={15} />
       </button>
       <button {...btn(false, () => {
         const val = prompt("进度百分比（0-100）：", "50");
         const num = parseInt(val || "50", 10);
         editor.chain().focus().insertProgress(isNaN(num) ? 50 : Math.min(100, Math.max(0, num))).run();
-      })} title="进度条">
+      })} title="进度条" className="hidden md:flex w-7 h-7 md:w-8 md:h-8 rounded items-center justify-center transition-colors text-text-secondary hover:bg-list-hover hover:text-text-primary">
         <BarChart3 size={15} />
       </button>
 
@@ -335,10 +341,10 @@ export default function EditorToolbar({
         <Search size={15} />
       </button>
 
-      {/* 阅读/编辑模式 */}
+      {/* 阅读/编辑模式 — 移动端隐藏（顶栏已有） */}
       <button
         onClick={onToggleReadonly}
-        className="h-8 px-2.5 rounded text-xs font-medium flex items-center gap-1.5 ml-auto
+        className="h-8 px-2.5 rounded text-xs font-medium hidden md:flex items-center gap-1.5 ml-auto
           text-text-secondary hover:bg-list-hover transition-colors"
         title={isReadonly ? "切换到编辑模式" : "切换到阅读模式"}
       >

@@ -186,44 +186,45 @@ export default function DocEditor({ document: doc, onSave, onShare }: DocEditorP
   return (
     <div className="flex-1 flex flex-col bg-panel-bg overflow-hidden">
       {/* 顶栏 */}
-      <div className="h-14 px-6 flex items-center justify-between border-b border-panel-border shrink-0">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
+      <div className="h-12 md:h-14 px-3 md:px-6 flex items-center justify-between border-b border-panel-border shrink-0">
+        <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             readOnly={isReadonly}
-            className="text-base font-semibold text-text-primary bg-transparent border-none outline-none flex-1 min-w-0"
+            className="text-sm md:text-base font-semibold text-text-primary bg-transparent border-none outline-none flex-1 min-w-0"
             placeholder="无标题文档"
           />
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs text-text-placeholder flex items-center gap-1">
+        <div className="flex items-center gap-1 md:gap-2 shrink-0">
+          {/* 保存时间 — 移动端隐藏 */}
+          <span className="text-xs text-text-placeholder hidden md:flex items-center gap-1">
             <Clock size={12} />
             {lastSaved ? `保存于 ${formatTime(lastSaved)}` : "未保存"}
           </span>
 
-          {/* 阅读/编辑模式切换（顶栏也显示） */}
+          {/* 阅读/编辑模式切换 */}
           <button
             onClick={() => setIsReadonly(!isReadonly)}
-            className={`h-8 px-3 rounded-lg text-sm flex items-center gap-1.5 transition-colors
+            className={`h-8 px-2 md:px-3 rounded-lg text-sm flex items-center gap-1.5 transition-colors
               ${isReadonly
                 ? "bg-primary/10 text-primary hover:bg-primary/20"
                 : "text-text-secondary hover:bg-list-hover"}`}
             title={isReadonly ? "切换到编辑模式" : "切换到阅读模式"}
           >
-            {isReadonly ? <><Pencil size={14} /> 编辑</> : <><BookOpen size={14} /> 阅读</>}
+            {isReadonly ? <><Pencil size={14} /> <span className="hidden md:inline">编辑</span></> : <><BookOpen size={14} /> <span className="hidden md:inline">阅读</span></>}
           </button>
 
           {!isReadonly && (
             <button onClick={handleSave} disabled={isSaving}
-              className="h-8 px-3 rounded-lg bg-primary text-white text-sm flex items-center gap-1.5
+              className="h-8 px-2 md:px-3 rounded-lg bg-primary text-white text-sm flex items-center gap-1.5
                 hover:bg-primary-hover transition-colors disabled:opacity-50">
-              <Save size={14} /> {isSaving ? "保存中..." : "保存"}
+              <Save size={14} /> <span className="hidden md:inline">{isSaving ? "保存中..." : "保存"}</span>
             </button>
           )}
 
           <button onClick={() => onShare?.(doc)} title="发送给联系人"
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-text-secondary hover:bg-list-hover transition-colors">
+            className="w-8 h-8 rounded-lg hidden md:flex items-center justify-center text-text-secondary hover:bg-list-hover transition-colors">
             <Share2 size={16} />
           </button>
 
@@ -239,6 +240,12 @@ export default function DocEditor({ document: doc, onSave, onShare }: DocEditorP
                   <button onClick={() => { setShowTOC(!showTOC); setShowMenu(false); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-list-hover transition-colors">
                     <BookOpen size={12} /> {showTOC ? "隐藏目录" : "显示目录"}
+                  </button>
+                  {/* 分享按钮 — 移动端显示在菜单里 */}
+                  <button
+                    onClick={() => { onShare?.(doc); setShowMenu(false); }}
+                    className="w-full flex md:hidden items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-list-hover transition-colors">
+                    <Share2 size={12} /> 发送给联系人
                   </button>
                   <button
                     onClick={() => {
@@ -283,7 +290,7 @@ export default function DocEditor({ document: doc, onSave, onShare }: DocEditorP
       {/* 编辑区域 + 目录 */}
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 overflow-y-auto relative">
-          <div className="max-w-3xl mx-auto px-12 py-8">
+          <div className="max-w-full md:max-w-3xl mx-auto px-4 py-4 md:px-12 md:py-8">
             <EditorContent editor={editor} />
           </div>
           {/* 表格浮动工具栏 */}

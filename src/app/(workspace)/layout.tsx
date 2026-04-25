@@ -40,7 +40,7 @@ function SuspendedOverlay() {
 /** 内部布局（需在 OrgProvider 内部使用 useOrg） */
 function WorkspaceInner({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-screen w-screen overflow-hidden">
+    <div className="flex flex-col-reverse md:flex-row h-screen w-screen overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex overflow-hidden relative">
         <SuspendedOverlay />

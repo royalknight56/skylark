@@ -74,9 +74,12 @@ export default function Sidebar() {
   const getOrgInitial = (name: string) => name.charAt(0);
 
   return (
-    <aside className="w-16 h-screen bg-sidebar-bg flex flex-col items-center py-4 shrink-0">
-      {/* 企业切换按钮 */}
-      <div className="relative" ref={menuRef}>
+    <aside className="
+      w-full h-14 bg-sidebar-bg flex flex-row items-center justify-around px-2 shrink-0 border-t border-white/10
+      md:w-16 md:h-screen md:flex-col md:items-center md:justify-start md:py-4 md:px-0 md:border-t-0
+    ">
+      {/* 企业切换按钮 — 移动端隐藏 */}
+      <div className="relative hidden md:block" ref={menuRef}>
         {loading || !currentOrg ? (
           <div className="w-9 h-9 rounded-lg bg-primary/50 flex items-center justify-center mb-1">
             <Loader2 size={16} className="text-white animate-spin" />
@@ -174,8 +177,8 @@ export default function Sidebar() {
         )}
       </div>
 
-      {/* 主导航 */}
-      <nav className="flex-1 flex flex-col items-center gap-1">
+      {/* 主导航 — 移动端水平排列，桌面端垂直排列 */}
+      <nav className="flex flex-row items-center gap-1 md:flex-1 md:flex-col md:items-center md:gap-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href, (item as { matchPrefixes?: string[] }).matchPrefixes);
@@ -192,15 +195,18 @@ export default function Sidebar() {
               title={item.label}
             >
               <Icon size={20} />
+              {/* 移动端显示文字标签 */}
+              <span className="text-[9px] leading-tight mt-0.5 md:hidden">{item.label}</span>
               {/* 未读消息角标 */}
               {showBadge && (
                 <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-danger text-white text-[10px] font-bold flex items-center justify-center leading-none">
                   {totalUnread > 99 ? "99+" : totalUnread}
                 </span>
               )}
+              {/* 桌面端 hover 提示 */}
               <span
                 className="absolute left-14 px-2 py-1 bg-gray-800 text-white text-xs rounded
-                  opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50"
+                  opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 hidden md:block"
               >
                 {item.label}
               </span>
@@ -209,13 +215,13 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* 底部设置 */}
-      <div className="flex flex-col items-center gap-2">
-        {/* 管理后台入口 - 仅 owner 可见 */}
+      {/* 底部设置 — 移动端仅显示设置和头像 */}
+      <div className="flex flex-row items-center gap-2 md:flex-col md:items-center md:gap-2">
+        {/* 管理后台入口 - 仅 owner 且桌面端可见 */}
         {currentOrg && user && currentOrg.owner_id === user.id && (
           <Link
             href="/admin"
-            className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative group
+            className={`w-10 h-10 rounded-lg hidden md:flex items-center justify-center transition-colors relative group
               ${pathname.startsWith("/admin")
                 ? "bg-sidebar-active text-sidebar-text-active"
                 : "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active"
@@ -233,7 +239,7 @@ export default function Sidebar() {
         )}
         <Link
           href="/settings"
-          className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors relative group
+          className={`w-10 h-10 rounded-lg hidden md:flex items-center justify-center transition-colors relative group
             ${pathname.startsWith("/settings")
               ? "bg-sidebar-active text-sidebar-text-active"
               : "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active"

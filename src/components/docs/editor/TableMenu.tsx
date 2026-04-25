@@ -96,10 +96,10 @@ export default function TableMenu({ editor }: TableMenuProps) {
   return (
     <div
       ref={menuRef}
-      className="absolute z-30 -translate-x-1/2"
+      className="absolute z-30 -translate-x-1/2 max-w-[calc(100vw-2rem)] md:max-w-none"
       style={{ top: pos.top, left: pos.left }}
     >
-      <div className="flex items-center gap-0.5 bg-panel-bg rounded-lg shadow-lg border border-panel-border px-1.5 py-1">
+      <div className="flex items-center flex-wrap gap-0.5 bg-panel-bg rounded-lg shadow-lg border border-panel-border px-1.5 py-1">
         {/* 行操作 */}
         <TBtn icon={ArrowUpToLine} title="上方插入行"
           onClick={() => editor.chain().focus().addRowBefore().run()} />
@@ -135,7 +135,7 @@ export default function TableMenu({ editor }: TableMenuProps) {
           {showColorPicker && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowColorPicker(false)} />
-              <div className="absolute left-1/2 -translate-x-1/2 top-9 w-36 bg-panel-bg rounded-lg shadow-lg border border-panel-border z-50 py-2 px-2">
+              <div className="absolute left-0 md:left-1/2 md:-translate-x-1/2 top-9 w-36 bg-panel-bg rounded-lg shadow-lg border border-panel-border z-50 py-2 px-2">
                 <p className="text-[10px] text-text-placeholder mb-1 px-1">背景色</p>
                 <div className="grid grid-cols-4 gap-1">
                   {CELL_COLORS.map((c) => (
@@ -221,5 +221,5 @@ function TBtn({
 }
 
 function Sep() {
-  return <div className="w-px h-5 bg-panel-border mx-0.5 shrink-0" />;
+  return <div className="w-px h-5 bg-panel-border mx-0.5 shrink-0 hidden md:block" />;
 }

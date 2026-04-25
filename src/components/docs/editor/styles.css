@@ -465,3 +465,64 @@
 .tiptap-editor .ProseMirror-gapcursor::after {
   border-top-color: var(--color-text-primary, #1f2329);
 }
+
+/* ========= 移动端适配 ========= */
+@media (max-width: 767px) {
+  .tiptap-editor {
+    min-height: 300px;
+    font-size: 0.9375rem;
+  }
+
+  /* 标题字号缩小 */
+  .tiptap-editor h1 {
+    font-size: 1.5rem;
+    margin-top: 1.5rem;
+  }
+  .tiptap-editor h2 {
+    font-size: 1.25rem;
+    margin-top: 1.25rem;
+  }
+  .tiptap-editor h3 {
+    font-size: 1.125rem;
+    margin-top: 1rem;
+  }
+  .tiptap-editor h4 {
+    font-size: 1rem;
+    margin-top: 1rem;
+  }
+
+  /* 表格横向滚动 */
+  .tiptap-editor .tableWrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tiptap-editor th,
+  .tiptap-editor td {
+    min-width: 80px;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.8125rem;
+  }
+
+  /* 分栏在手机上竖向堆叠 */
+  .tiptap-editor .columns {
+    flex-direction: column;
+  }
+
+  /* 代码块紧凑 */
+  .tiptap-editor pre {
+    font-size: 0.8125rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+  }
+
+  /* Callout 紧凑 */
+  .tiptap-editor .callout {
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+
+  /* 引用紧凑 */
+  .tiptap-editor blockquote {
+    padding: 0.375rem 0.75rem;
+  }
+}
