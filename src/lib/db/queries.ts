@@ -36,6 +36,7 @@ import type {
   MessageReadInfo,
   MessageReaction,
 } from '../types';
+import { createMailAccount, generateMailId, normalizeMailAddress } from '../mail';
 
 /* ==================== 企业/组织查询 ==================== */
 
@@ -135,6 +136,75 @@ export async function joinOrganization(
     .prepare('UPDATE users SET current_org_id = ? WHERE id = ?')
     .bind(orgId, userId)
     .run();
+
+  await assignMailboxForNewMember(db, orgId, userId);
+}
+
+/** 为新加入企业的成员自动分配默认企业邮箱 */
+async function assignMailboxForNewMember(db: D1Database, orgId: string, userId: string): Promise<void> {
+  try {
+    const existing = await db
+      .prepare("SELECT 1 FROM mail_accounts WHERE org_id = ? AND user_id = ? LIMIT 1")
+      .bind(orgId, userId)
+      .first();
+    if (existing) return;
+
+    const domain = await db
+      .prepare(
+        `SELECT id, domain
+         FROM mail_domains
+         WHERE org_id = ? AND status = 'active'
+         ORDER BY routing_enabled DESC, created_at ASC
+         LIMIT 1`
+      )
+      .bind(orgId)
+      .first<{ id: string; domain: string }>();
+    if (!domain) return;
+
+    const user = await db
+      .prepare("SELECT email, name FROM users WHERE id = ?")
+      .bind(userId)
+      .first<{ email: string; name: string }>();
+    if (!user) return;
+
+    const localPart = await buildAvailableMailLocalPart(db, user.email, domain.domain);
+    await createMailAccount(db, {
+      id: generateMailId("mailacc"),
+      org_id: orgId,
+      user_id: userId,
+      domain_id: domain.id,
+      address: normalizeMailAddress(`${localPart}@${domain.domain}`),
+      display_name: user.name,
+      is_default: true,
+    });
+  } catch {
+    // 邮箱自动分配是附加能力，不能影响用户正常加入企业。
+  }
+}
+
+/** 根据用户登录邮箱生成可用的企业邮箱前缀 */
+async function buildAvailableMailLocalPart(db: D1Database, email: string, domain: string): Promise<string> {
+  const base = normalizeMailLocalPart(email.split("@")[0] || "user");
+  for (let index = 0; index < 100; index += 1) {
+    const candidate = index === 0 ? base : `${base}${index + 1}`;
+    const address = normalizeMailAddress(`${candidate}@${domain}`);
+    const existing = await db
+      .prepare("SELECT 1 FROM mail_accounts WHERE lower(address) = ? LIMIT 1")
+      .bind(address)
+      .first();
+    if (!existing) return candidate;
+  }
+  return `${base}-${Date.now().toString(36)}`;
+}
+
+/** 清洗邮箱前缀，仅保留 Cloudflare Email Routing 兼容字符 */
+function normalizeMailLocalPart(value: string): string {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, ".")
+    .replace(/[.]{2,}/g, ".")
+    .replace(/^[._-]+|[._-]+$/g, "");
+  return normalized || "user";
 }
 
 /** 切换当前企业 */
