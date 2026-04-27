@@ -1,47 +1,18 @@
-# OpenNext Starter
+# 开源云雀
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+云雀是一款企业通讯sass软件，依托于cloudflare生态，可以方便的进行部署，目前处于开发早期。
 
-## Getting Started
+### 理念
 
-Read the documentation at https://opennext.js.org/cloudflare.
+对于ai时代的到来，软件开发的范式也迎来了非常巨大的改变，以往需要人工手动进行修改的时代必定消逝了。
 
-## Develop
+传统sass软件在ai时代也没有存在的必要，每个企业可以根据自己的业务进行自定义开发，这个仓库就是为了替代传统企业通讯工具而实现的，企业可以基于此项目进行二次开发，实现自己的功能，之前的通讯软件所提供的类似于“** 开放平台”也没有存在的必要了，开源云雀只提供了一个工作台面板，企业如果需要添加自定义应用，不需要再去翻api接口文档，只需要用ai进行开发，直接将实现的功能添加到代码中即可。
 
-Run the Next.js development server:
+ai时代需要的是减少人类在开发loop中的存在，而本仓库需要的是彻底消灭人类这一元素。
 
-```bash
-npm run dev
-# or similar package manager command
-```
+怎么做到消灭人类：
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+对于人类提出的issue，将不再接收人类的提交，全部由ai进行生成合并，定期发版。（当前可能需要人类审查issue的合理性，当然，这一步在未来也是可以ai进行的）。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+不再接收人类贡献者，本开源项目的贡献方式改为贡献token，如果有开发者想参与项目贡献，只需要提供apikey。后续将提供平台实现这一功能。
 
-## Preview
-
-Preview the application locally on the Cloudflare runtime:
-
-```bash
-npm run preview
-# or similar package manager command
-```
-
-## Deploy
-
-Deploy the application to Cloudflare:
-
-```bash
-npm run deploy
-# or similar package manager command
-```
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
