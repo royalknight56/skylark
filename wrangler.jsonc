@@ -52,6 +52,12 @@
 			"bucket_name": "skylark-files"
 		}
 	],
+	// Cloudflare Email Service - 企业邮箱发信
+	"send_email": [
+		{
+			"name": "EMAIL"
+		}
+	],
 	// KV 缓存 - 在线状态、未读计数
 	"kv_namespaces": [
 		{

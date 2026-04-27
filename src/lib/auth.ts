@@ -5,12 +5,25 @@
  * @author skylark
  */
 
+import type { NextResponse } from 'next/server';
 import type { User, OrgMemberRole, AdminPermission } from './types';
 import { getUserAdminPermissions } from './db/queries';
 import { cookies } from 'next/headers';
 
 /** cookie 名 */
 export const AUTH_COOKIE = 'skylark-uid';
+const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
+const PASSWORD_HASH_ALGORITHM = 'pbkdf2-sha256';
+const PASSWORD_HASH_ITERATIONS = 100_000;
+
+const USER_SELECT = `
+  id, email, name, avatar_url, login_phone, status, status_text,
+  status_emoji, signature, current_org_id, created_at
+`;
+
+interface UserWithPassword extends User {
+  password_hash: string | null;
+}
 
 /**
  * 获取当前请求对应的用户 ID
@@ -31,7 +44,50 @@ export async function getRequestUser(db: D1Database): Promise<User | null> {
   if (!userId) return null;
 
   return db
-    .prepare('SELECT * FROM users WHERE id = ?')
+    .prepare(`SELECT ${USER_SELECT} FROM users WHERE id = ?`)
+    .bind(userId)
+    .first<User>();
+}
+
+/** 标准化邮箱，避免大小写导致重复账号 */
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+/** 校验邮箱格式 */
+export function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+/** 校验密码强度 */
+export function isValidPassword(password: string): boolean {
+  return password.length >= 8 && /[A-Za-z]/.test(password) && /\d/.test(password);
+}
+
+/** 设置登录 Cookie */
+export function setAuthCookie(response: NextResponse, userId: string): void {
+  response.cookies.set(AUTH_COOKIE, userId, {
+    httpOnly: true,
+    path: '/',
+    maxAge: AUTH_COOKIE_MAX_AGE,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  });
+}
+
+/** 根据邮箱获取完整认证用户 */
+export async function getUserByEmail(db: D1Database, email: string): Promise<UserWithPassword | null> {
+  await ensureAuthSchema(db);
+  return db
+    .prepare('SELECT * FROM users WHERE email = ?')
+    .bind(normalizeEmail(email))
+    .first<UserWithPassword>();
+}
+
+/** 根据用户 ID 获取可返回给前端的用户信息 */
+export async function getPublicUserById(db: D1Database, userId: string): Promise<User | null> {
+  return db
+    .prepare(`SELECT ${USER_SELECT} FROM users WHERE id = ?`)
     .bind(userId)
     .first<User>();
 }
@@ -39,12 +95,129 @@ export async function getRequestUser(db: D1Database): Promise<User | null> {
 /** 根据邮箱生成确定性用户 ID */
 export function generateUserId(email: string): string {
   let hash = 0;
-  for (let i = 0; i < email.length; i++) {
-    const char = email.charCodeAt(i);
+  const normalizedEmail = normalizeEmail(email);
+  for (let i = 0; i < normalizedEmail.length; i++) {
+    const char = normalizedEmail.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
     hash |= 0;
   }
   return `user-${Math.abs(hash).toString(36)}`;
+}
+
+/** 创建密码账号 */
+export async function createPasswordUser(
+  db: D1Database,
+  user: Pick<User, 'id' | 'email' | 'name' | 'avatar_url'>,
+  passwordHash: string
+): Promise<User> {
+  await ensureAuthSchema(db);
+  await db
+    .prepare(`
+      INSERT INTO users (id, email, password_hash, name, avatar_url, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `)
+    .bind(user.id, normalizeEmail(user.email), passwordHash, user.name, user.avatar_url, 'online')
+    .run();
+
+  const createdUser = await getPublicUserById(db, user.id);
+  if (!createdUser) {
+    throw new Error('用户创建失败');
+  }
+  return createdUser;
+}
+
+/** 确保认证相关字段存在，避免旧本地 D1 未执行迁移时注册失败 */
+async function ensureAuthSchema(db: D1Database): Promise<void> {
+  const columns = await db.prepare('PRAGMA table_info(users)').all<{ name: string }>();
+  const hasPasswordHash = columns.results.some((column) => column.name === 'password_hash');
+  if (!hasPasswordHash) {
+    await db.prepare('ALTER TABLE users ADD COLUMN password_hash TEXT').run();
+  }
+}
+
+/** 生成密码哈希 */
+export async function hashPassword(password: string): Promise<string> {
+  const salt = new Uint8Array(16);
+  crypto.getRandomValues(salt);
+  const hash = await derivePasswordHash(password, salt, PASSWORD_HASH_ITERATIONS);
+  return [
+    PASSWORD_HASH_ALGORITHM,
+    String(PASSWORD_HASH_ITERATIONS),
+    bytesToBase64(salt),
+    bytesToBase64(hash),
+  ].join(':');
+}
+
+/** 校验密码 */
+export async function verifyPassword(password: string, passwordHash: string): Promise<boolean> {
+  const [algorithm, iterationsText, saltText, hashText] = passwordHash.split(':');
+  if (algorithm !== PASSWORD_HASH_ALGORITHM || !iterationsText || !saltText || !hashText) {
+    return false;
+  }
+
+  const iterations = Number(iterationsText);
+  if (!Number.isInteger(iterations) || iterations <= 0) {
+    return false;
+  }
+
+  const salt = base64ToBytes(saltText);
+  const expectedHash = base64ToBytes(hashText);
+  const actualHash = await derivePasswordHash(password, salt, iterations);
+  return constantTimeEqual(actualHash, expectedHash);
+}
+
+/** PBKDF2 派生密码哈希 */
+async function derivePasswordHash(
+  password: string,
+  salt: Uint8Array,
+  iterations: number
+): Promise<Uint8Array> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: toArrayBuffer(salt), iterations },
+    key,
+    256
+  );
+  return new Uint8Array(bits);
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a[i] ^ b[i];
+  }
+  return result === 0;
 }
 
 /**
@@ -99,25 +272,3 @@ export async function requireAdmin(
   return null;
 }
 
-/** 确保用户存在于数据库中（upsert） */
-export async function ensureUser(db: D1Database, user: User): Promise<User> {
-  const existing = await db
-    .prepare('SELECT * FROM users WHERE id = ?')
-    .bind(user.id)
-    .first<User>();
-
-  if (existing) {
-    await db
-      .prepare('UPDATE users SET status = ? WHERE id = ?')
-      .bind('online', existing.id)
-      .run();
-    return { ...existing, status: 'online' };
-  }
-
-  await db
-    .prepare('INSERT INTO users (id, email, name, avatar_url, status) VALUES (?, ?, ?, ?, ?)')
-    .bind(user.id, user.email, user.name, user.avatar_url, 'online')
-    .run();
-
-  return user;
-}

@@ -889,7 +889,14 @@ export async function getContacts(
 
 /** 获取所有用户 */
 export async function getAllUsers(db: D1Database): Promise<User[]> {
-  const result = await db.prepare('SELECT * FROM users ORDER BY name').all<User>();
+  const result = await db
+    .prepare(`
+      SELECT id, email, name, avatar_url, login_phone, status, status_text,
+        status_emoji, signature, current_org_id, created_at
+      FROM users
+      ORDER BY name
+    `)
+    .all<User>();
   return result.results;
 }
 

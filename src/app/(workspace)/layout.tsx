@@ -40,9 +40,9 @@ function SuspendedOverlay() {
 /** 内部布局（需在 OrgProvider 内部使用 useOrg） */
 function WorkspaceInner({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col-reverse md:flex-row h-screen w-screen overflow-hidden">
+    <div className="workspace-shell flex flex-col-reverse md:flex-row">
       <Sidebar />
-      <main className="flex-1 flex overflow-hidden relative">
+      <main className="flex-1 min-h-0 flex overflow-hidden relative">
         <SuspendedOverlay />
         {children}
       </main>
@@ -59,7 +59,7 @@ export default function WorkspaceLayout({
 
   if (loading) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-bg-page">
+      <div className="workspace-shell flex items-center justify-center bg-bg-page">
         <Loader2 size={32} className="text-primary animate-spin" />
       </div>
     );

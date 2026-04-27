@@ -260,6 +260,80 @@ export interface CalendarAttendee {
   user?: User;
 }
 
+/* ==================== 企业邮箱相关 ==================== */
+
+export type MailDomainStatus = 'pending' | 'active' | 'disabled';
+export type MailAccountStatus = 'active' | 'disabled';
+export type MailDirection = 'inbound' | 'outbound';
+export type MailFolder = 'inbox' | 'sent' | 'draft' | 'archive' | 'trash';
+export type MailRecipientType = 'to' | 'cc' | 'bcc';
+export type MailDeliveryStatus = 'pending' | 'sent' | 'failed';
+
+export interface MailDomain {
+  id: string;
+  org_id: string;
+  domain: string;
+  status: MailDomainStatus;
+  routing_enabled: boolean;
+  created_by: string;
+  created_at: string;
+}
+
+export interface MailAccount {
+  id: string;
+  org_id: string;
+  user_id: string;
+  domain_id: string;
+  address: string;
+  display_name: string;
+  is_default: boolean;
+  status: MailAccountStatus;
+  created_at: string;
+  user?: User;
+  domain?: MailDomain;
+}
+
+export interface MailMessage {
+  id: string;
+  org_id: string;
+  account_id: string;
+  direction: MailDirection;
+  folder: MailFolder;
+  from_address: string;
+  to_addresses: string[];
+  cc_addresses: string[];
+  bcc_addresses: string[];
+  subject: string | null;
+  text_body: string | null;
+  html_body: string | null;
+  message_id: string | null;
+  in_reply_to: string | null;
+  sent_at: string | null;
+  received_at: string | null;
+  read_at: string | null;
+  created_at: string;
+  attachments?: MailAttachment[];
+}
+
+export interface MailAttachment {
+  id: string;
+  message_id: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string | null;
+  r2_key: string;
+  content_id: string | null;
+  created_at: string;
+  url?: string;
+}
+
+export interface MailRecipient {
+  message_id: string;
+  address: string;
+  type: MailRecipientType;
+  delivery_status: MailDeliveryStatus;
+}
+
 /* ==================== 云文档相关 ==================== */
 
 export type DocType = 'doc' | 'sheet';
@@ -532,6 +606,7 @@ export type AdminPermission =
   | 'join_requests'   // 加入审批
   | 'rooms'           // 会议室管理
   | 'bots'            // 机器人管理
+  | 'mail'            // 企业邮箱管理
   | 'logs'            // 操作日志
   | 'roles';          // 管理员权限管理
 
@@ -544,6 +619,7 @@ export const ADMIN_PERMISSION_META: Record<AdminPermission, { label: string; des
   join_requests:  { label: '加入审批',     desc: '审批通过邀请码申请加入的请求' },
   rooms:          { label: '会议室管理',   desc: '管理会议室资源和预定设置' },
   bots:           { label: '机器人管理',   desc: '管理企业自建机器人' },
+  mail:           { label: '企业邮箱',     desc: '配置企业邮箱域名、邮箱账号和收发信能力' },
   logs:           { label: '操作日志',     desc: '查看管理后台操作记录' },
   roles:          { label: '管理员权限',   desc: '创建管理员角色、分配权限和管理员' },
 };

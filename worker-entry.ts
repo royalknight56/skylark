@@ -7,6 +7,7 @@
 
 // @ts-ignore — 由 opennextjs-cloudflare build 生成
 import openNextHandler from "./.open-next/worker.js";
+import { handleIncomingEmail } from "./src/lib/mail";
 
 /** 从 cookie 字符串中解析指定 key */
 function getCookie(cookieHeader: string | null, name: string): string | null {
@@ -16,6 +17,10 @@ function getCookie(cookieHeader: string | null, name: string): string | null {
 }
 
 export default {
+  async email(message: ForwardableEmailMessage, env: CloudflareEnv, ctx: ExecutionContext) {
+    await handleIncomingEmail(message, env);
+  },
+
   async fetch(request: Request, env: CloudflareEnv, ctx: ExecutionContext) {
     const url = new URL(request.url);
     const isWsUpgrade = request.headers.get("Upgrade") === "websocket";

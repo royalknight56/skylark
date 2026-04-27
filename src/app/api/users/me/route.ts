@@ -6,9 +6,8 @@
  */
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { getRequestUserId } from "@/lib/auth";
+import { getPublicUserById, getRequestUserId } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
-import type { User } from "@/lib/types";
 
 /** GET /api/users/me */
 export async function GET() {
@@ -17,10 +16,7 @@ export async function GET() {
     if (!userId) return NextResponse.json({ success: false, error: "未登录" }, { status: 401 });
 
     const { env } = await getCloudflareContext();
-    const user = await env.DB
-      .prepare("SELECT * FROM users WHERE id = ?")
-      .bind(userId)
-      .first<User>();
+    const user = await getPublicUserById(env.DB, userId);
 
     if (!user) return NextResponse.json({ success: false, error: "用户不存在" }, { status: 404 });
 
@@ -66,10 +62,7 @@ export async function PUT(request: NextRequest) {
       .bind(...values)
       .run();
 
-    const updated = await env.DB
-      .prepare("SELECT * FROM users WHERE id = ?")
-      .bind(userId)
-      .first<User>();
+    const updated = await getPublicUserById(env.DB, userId);
 
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {

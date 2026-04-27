@@ -23,12 +23,19 @@ interface AuthContextValue {
   user: User | null;
   /** 是否正在检查登录态 */
   loading: boolean;
+  /** 登录 */
+  login: (email: string, password: string) => Promise<AuthResult>;
   /** 注册并登录 */
-  register: (name: string, email: string) => Promise<boolean>;
+  register: (name: string, email: string, password: string) => Promise<AuthResult>;
   /** 登出 */
   logout: () => Promise<void>;
   /** 刷新当前用户信息 */
   refreshUser: () => Promise<void>;
+}
+
+interface AuthResult {
+  success: boolean;
+  error?: string;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -74,24 +81,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
-  /** 注册 */
-  const register = useCallback(async (name: string, email: string): Promise<boolean> => {
+  /** 登录/注册公共请求 */
+  const authenticate = useCallback(async (
+    url: string,
+    body: Record<string, string>
+  ): Promise<AuthResult> => {
     try {
-      const res = await fetch("/api/auth/register", {
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email }),
+        body: JSON.stringify(body),
       });
-      const json = (await res.json()) as { success: boolean; data?: User };
+      const json = (await res.json()) as { success: boolean; data?: User; error?: string };
       if (json.success && json.data) {
         setUser(json.data);
-        return true;
+        return { success: true };
       }
-      return false;
+      return { success: false, error: json.error || "认证失败，请重试" };
     } catch {
-      return false;
+      return { success: false, error: "网络异常，请稍后重试" };
     }
   }, []);
+
+  /** 登录 */
+  const login = useCallback(async (email: string, password: string): Promise<AuthResult> => {
+    return authenticate("/api/auth/login", { email, password });
+  }, [authenticate]);
+
+  /** 注册 */
+  const register = useCallback(async (
+    name: string,
+    email: string,
+    password: string
+  ): Promise<AuthResult> => {
+    return authenticate("/api/auth/register", { name, email, password });
+  }, [authenticate]);
 
   /** 登出 */
   const logout = useCallback(async () => {
@@ -118,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

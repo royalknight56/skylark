@@ -64,6 +64,27 @@ body {
   overflow: hidden;
 }
 
+/* 移动端 Chrome 使用动态视口，避免底部工具栏遮挡底部导航 */
+.workspace-shell {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* 底部 Tab 预留系统安全区，兼容带手势条的移动设备 */
+.mobile-tabbar {
+  height: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (min-width: 768px) {
+  .mobile-tabbar {
+    height: 100vh;
+    padding-bottom: 0;
+  }
+}
+
 /* 自定义滚动条 */
 ::-webkit-scrollbar {
   width: 6px;

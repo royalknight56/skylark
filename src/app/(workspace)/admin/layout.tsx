@@ -12,7 +12,7 @@ import Link from "next/link";
 import {
   BarChart3, Users, Building2, Settings, ScrollText,
   ClipboardCheck, ArrowLeft, Loader2, ShieldX,
-  Bot, DoorOpen, Tag, Shield,
+  Bot, DoorOpen, Tag, Shield, Mail,
 } from "lucide-react";
 import { useOrg } from "@/lib/org-context";
 import { useAuth } from "@/lib/auth-context";
@@ -35,6 +35,7 @@ const adminNav: NavItem[] = [
   { icon: ClipboardCheck,label: "加入审批",   href: "/admin/join-requests",  permission: "join_requests" },
   { icon: DoorOpen,      label: "会议室管理", href: "/admin/rooms",          permission: "rooms" },
   { icon: Bot,           label: "机器人管理", href: "/admin/bots",           permission: "bots" },
+  { icon: Mail,          label: "企业邮箱",   href: "/admin/mail",           permission: "mail" },
   { icon: Shield,        label: "管理员权限", href: "/admin/roles",          permission: "roles" },
   { icon: ScrollText,    label: "操作日志",   href: "/admin/logs",           permission: "logs" },
 ];

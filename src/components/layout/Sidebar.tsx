@@ -11,6 +11,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   MessageSquare,
+  Mail,
   Users,
   FileText,
   Settings,
@@ -30,6 +31,7 @@ import ProfilePopup from "@/components/profile/ProfilePopup";
 /** 导航项配置 */
 const navItems = [
   { icon: MessageSquare, label: "消息", href: "/messages" },
+  { icon: Mail, label: "邮箱", href: "/mail" },
   { icon: Calendar, label: "日历", href: "/calendar" },
   { icon: Users, label: "通讯录", href: "/contacts" },
   { icon: FileText, label: "云文档", href: "/docs", matchPrefixes: ["/docs", "/bases"] },
@@ -75,7 +77,7 @@ export default function Sidebar() {
 
   return (
     <aside className="
-      w-full h-14 bg-sidebar-bg flex flex-row items-center justify-around px-2 shrink-0 border-t border-white/10
+      mobile-tabbar w-full bg-sidebar-bg flex flex-row items-center justify-around px-2 shrink-0 border-t border-white/10
       md:w-16 md:h-screen md:flex-col md:items-center md:justify-start md:py-4 md:px-0 md:border-t-0
     ">
       {/* 企业切换按钮 — 移动端隐藏 */}

@@ -6,6 +6,7 @@ declare namespace Cloudflare {
 		KV: KVNamespace;
 		R2: R2Bucket;
 		DB: D1Database;
+		EMAIL: SendEmail;
 		IMAGES: ImagesBinding;
 		ASSETS: Fetcher;
 		NEXTJS_ENV: string;
