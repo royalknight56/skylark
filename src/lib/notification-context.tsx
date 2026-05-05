@@ -172,15 +172,16 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
               const title = data.payload.conversation_name || data.payload.sender_name;
 
               showToast({
+                variant: "message",
                 title,
-                body: data.payload.conversation_name
-                  ? `${data.payload.sender_name}: ${preview}`
-                  : preview,
+                subtitle: data.payload.conversation_name ? data.payload.sender_name : undefined,
+                body: preview,
                 avatar: {
                   name: data.payload.sender_name,
                   url: data.payload.sender_avatar,
                 },
                 href: `/messages/${data.payload.conversation_id}`,
+                duration: 6000,
               });
 
               if (browserNotifRef.current && document.hidden) {
