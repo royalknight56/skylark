@@ -1,6 +1,6 @@
 /**
  * 文档编辑器组件
- * 基于 TipTap (ProseMirror) 的飞书风格文档编辑器
+ * 基于 TipTap (ProseMirror) 的现代文档编辑器
  * @author skylark
  */
 

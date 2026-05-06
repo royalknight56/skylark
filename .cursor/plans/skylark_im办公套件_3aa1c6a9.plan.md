@@ -1,6 +1,6 @@
 ---
 name: Skylark IM办公套件
-overview: 基于 Cloudflare 全生态（D1 + R2 + Durable Objects + KV + Access）构建类飞书的即时通讯办公软件，包含 IM 消息、通讯录、日历、云文档四大模块，前端使用 Next.js 16 + Tailwind CSS 实现三栏式布局。
+overview: 基于 Cloudflare 全生态（D1 + R2 + Durable Objects + KV + Access）构建即时通讯办公软件，包含 IM 消息、通讯录、日历、云文档四大模块，前端使用 Next.js 16 + Tailwind CSS 实现三栏式布局。
 todos:
   - id: phase1-deps
     content: "Phase 1: 安装依赖并配置 wrangler.jsonc 绑定 (D1/R2/KV/DO)"
@@ -38,7 +38,7 @@ todos:
 isProject: false
 ---
 
-# Skylark - 类飞书即时通讯办公平台
+# Skylark - 即时通讯办公平台
 
 ## 整体架构
 
@@ -224,7 +224,7 @@ sequenceDiagram
 
 ## UI 设计要点
 
-仿飞书三栏布局，主色调蓝色（#3370FF），深色侧边栏：
+三栏工作台布局，主色调蓝色（#3370FF），深色侧边栏：
 
 - **左侧导航栏** (64px)：图标导航，包含消息、通讯录、日历、云文档、工作台
 - **中间列表面板** (280px)：会话列表 / 联系人列表 / 日历列表等
