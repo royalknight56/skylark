@@ -64,12 +64,13 @@ export default function ContactsPage() {
         groups={groups}
         onSelectContact={setSelectedContact}
         selectedId={selectedContact?.id}
+        hiddenOnMobile={!!selectedContact}
         onClickAdd={() => setShowAddModal(true)}
       />
       {selectedContact ? (
-        <ContactCard user={selectedContact} />
+        <ContactCard user={selectedContact} onBack={() => setSelectedContact(null)} />
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center bg-bg-page">
+        <div className="hidden md:flex flex-1 flex-col items-center justify-center bg-bg-page">
           <div className="w-16 h-16 rounded-2xl bg-primary-light flex items-center justify-center mb-4">
             <Users size={32} className="text-primary" />
           </div>

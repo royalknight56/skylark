@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS employee_types (
 );
 
 CREATE INDEX IF NOT EXISTS idx_employee_types_org ON employee_types(org_id);
+CREATE INDEX IF NOT EXISTS idx_org_members_org_joined ON org_members(org_id, joined_at DESC);
 
 -- ==================== 用户 ====================
 
@@ -194,6 +195,7 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_conv_time ON messages(conversation_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conversations_org_updated ON conversations(org_id, updated_at DESC);
 
 -- 消息已读记录表
 CREATE TABLE IF NOT EXISTS message_reads (
@@ -206,6 +208,7 @@ CREATE TABLE IF NOT EXISTS message_reads (
 );
 
 CREATE INDEX IF NOT EXISTS idx_message_reads_user ON message_reads(user_id, read_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conversation_members_user ON conversation_members(user_id, conversation_id);
 
 -- 消息表情回复表
 CREATE TABLE IF NOT EXISTS message_reactions (
@@ -437,6 +440,7 @@ CREATE TABLE IF NOT EXISTS documents (
   FOREIGN KEY (org_id) REFERENCES organizations(id) ON DELETE CASCADE,
   FOREIGN KEY (creator_id) REFERENCES users(id)
 );
+CREATE INDEX IF NOT EXISTS idx_documents_org_creator_updated ON documents(org_id, creator_id, updated_at DESC);
 
 -- ==================== 多维表格 ====================
 

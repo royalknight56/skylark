@@ -246,10 +246,10 @@ export default function AdminRolesPage() {
   }
 
   return (
-    <div className="flex h-full gap-6">
+    <div className="flex flex-col lg:flex-row h-full gap-4 lg:gap-6">
       {/* 左侧：角色列表 */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div>
             <h1 className="text-xl font-bold text-text-primary flex items-center gap-2">
               <Shield size={22} className="text-primary" />
@@ -260,7 +260,7 @@ export default function AdminRolesPage() {
             </p>
           </div>
           <button onClick={openCreateModal}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium
               hover:bg-primary/90 transition-colors">
             <Plus size={16} /> 创建角色
           </button>
@@ -325,7 +325,7 @@ export default function AdminRolesPage() {
 
       {/* 右侧：角色详情 */}
       {selectedRole && (
-        <div className="w-96 bg-panel-bg border border-panel-border rounded-xl flex flex-col shrink-0 overflow-hidden">
+        <div className="w-full lg:w-96 bg-panel-bg border border-panel-border rounded-xl flex flex-col shrink-0 overflow-hidden">
           {detailLoading ? (
             <div className="flex-1 flex items-center justify-center">
               <Loader2 size={24} className="text-primary animate-spin" />

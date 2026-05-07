@@ -20,11 +20,12 @@ interface ContactListProps {
   groups: ContactGroup[];
   onSelectContact: (user: User) => void;
   selectedId?: string;
+  hiddenOnMobile?: boolean;
   /** 点击添加联系人按钮 */
   onClickAdd?: () => void;
 }
 
-export default function ContactList({ groups, onSelectContact, selectedId, onClickAdd }: ContactListProps) {
+export default function ContactList({ groups, onSelectContact, selectedId, hiddenOnMobile = false, onClickAdd }: ContactListProps) {
   const [searchText, setSearchText] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
@@ -59,7 +60,8 @@ export default function ContactList({ groups, onSelectContact, selectedId, onCli
   };
 
   return (
-    <div className="w-72 h-full border-r border-panel-border bg-panel-bg flex flex-col flex-shrink-0">
+    <div className={`w-full md:w-72 h-full border-r border-panel-border bg-panel-bg flex-col flex-shrink-0
+      ${hiddenOnMobile ? "hidden md:flex" : "flex"}`}>
       {/* 顶部标题栏 */}
       <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 border-b border-panel-border">
         <h2 className="text-base font-semibold text-text-primary">通讯录</h2>

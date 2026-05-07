@@ -7,11 +7,20 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
-import DocEditor from "@/components/docs/DocEditor";
 import ShareDocModal from "@/components/docs/ShareDocModal";
 import type { Document } from "@/lib/types";
+
+const DocEditor = dynamic(() => import("@/components/docs/DocEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex-1 flex items-center justify-center bg-bg-page">
+      <Loader2 size={28} className="text-primary animate-spin" />
+    </div>
+  ),
+});
 
 export default function DocDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);

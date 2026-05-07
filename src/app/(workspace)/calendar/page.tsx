@@ -78,9 +78,9 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="flex-1 flex relative">
+    <div className="flex-1 flex flex-col md:flex-row relative overflow-hidden">
       {/* 左侧面板 */}
-      <div className="w-56 border-r border-panel-border bg-panel-bg flex flex-col shrink-0">
+      <div className="w-full md:w-56 max-h-56 md:max-h-none border-b md:border-b-0 md:border-r border-panel-border bg-panel-bg flex flex-col shrink-0">
         <div className="h-14 px-4 flex items-center justify-between border-b border-panel-border">
           <h2 className="text-base font-semibold text-text-primary">日历</h2>
           <button onClick={() => setShowBusy(!showBusy)} title="查看忙闲"

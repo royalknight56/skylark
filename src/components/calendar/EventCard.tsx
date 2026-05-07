@@ -148,7 +148,7 @@ export default function EventCard({ event, onClose, onDeleted, onUpdated }: Even
   const canCheckIn = now >= eventStart - 15 * 60000 && now <= eventEnd && myAttendee && !myAttendee.checked_in;
 
   return (
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-panel-bg rounded-xl shadow-2xl z-50 overflow-hidden max-h-[80vh] flex flex-col">
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] sm:w-96 bg-panel-bg rounded-xl shadow-2xl z-50 overflow-hidden max-h-[80vh] flex flex-col">
       {/* 顶部色条 */}
       <div className="h-2 shrink-0" style={{ backgroundColor: detail.color }} />
 

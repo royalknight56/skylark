@@ -98,11 +98,11 @@ export default function CalendarView({ events, onSelectDate, onSelectEvent, onCr
     : `${weekDays[0].getMonth() + 1}月${weekDays[0].getDate()}日 - ${weekDays[6].getMonth() + 1}月${weekDays[6].getDate()}日`;
 
   return (
-    <div className="flex-1 flex flex-col bg-panel-bg overflow-hidden">
+    <div className="w-full min-w-0 flex-1 flex flex-col bg-panel-bg overflow-hidden">
       {/* 顶栏 */}
-      <div className="h-14 px-6 flex items-center justify-between border-b border-panel-border shrink-0">
-        <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold text-text-primary">{headerTitle}</h2>
+      <div className="min-h-14 px-3 md:px-6 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-panel-border shrink-0">
+        <div className="flex items-center justify-between sm:justify-start gap-3 min-w-0">
+          <h2 className="text-base md:text-lg font-semibold text-text-primary truncate">{headerTitle}</h2>
           <div className="flex items-center gap-1">
             <button onClick={goPrev} className="w-7 h-7 rounded flex items-center justify-center text-text-secondary hover:bg-list-hover"><ChevronLeft size={18} /></button>
             <button onClick={goToday} className="px-2.5 h-7 rounded text-xs font-medium text-primary hover:bg-primary-light">今天</button>
@@ -110,7 +110,7 @@ export default function CalendarView({ events, onSelectDate, onSelectEvent, onCr
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between sm:justify-start gap-2">
           {/* 视图切换 */}
           <div className="flex rounded-lg border border-panel-border overflow-hidden">
             <button onClick={() => setViewMode("month")}
@@ -123,7 +123,7 @@ export default function CalendarView({ events, onSelectDate, onSelectEvent, onCr
             </button>
           </div>
           <button onClick={() => onCreateEvent?.()} className="h-8 px-3 rounded-lg bg-primary text-white text-sm flex items-center gap-1.5 hover:bg-primary-hover">
-            <Plus size={16} /> 新建日程
+            <Plus size={16} /> <span className="hidden sm:inline">新建日程</span>
           </button>
         </div>
       </div>
@@ -152,6 +152,7 @@ function MonthView({
 }) {
   return (
     <div className="flex-1 overflow-auto p-4">
+      <div className="min-w-[42rem] md:min-w-0">
       <div className="grid grid-cols-7 mb-1">
         {WEEKDAYS.map((day) => (
           <div key={day} className="h-8 flex items-center justify-center text-xs font-medium text-text-secondary">{day}</div>
@@ -186,6 +187,7 @@ function MonthView({
           );
         })}
       </div>
+      </div>
     </div>
   );
 }
@@ -202,6 +204,7 @@ function WeekView({
 }) {
   return (
     <div className="flex-1 overflow-auto">
+      <div className="min-w-[42rem] md:min-w-0">
       {/* 日期行 */}
       <div className="flex border-b border-panel-border sticky top-0 bg-panel-bg z-10">
         <div className="w-16 shrink-0" />
@@ -270,6 +273,7 @@ function WeekView({
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

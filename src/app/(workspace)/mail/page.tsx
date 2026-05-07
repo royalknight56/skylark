@@ -6,7 +6,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Archive, Inbox, Loader2, Mail, Paperclip, PenLine, RefreshCw, Send, Trash2, X } from "lucide-react";
+import { Archive, ArrowLeft, Inbox, Loader2, Mail, Paperclip, PenLine, RefreshCw, Send, Trash2, X } from "lucide-react";
 import type { MailAccount, MailFolder, MailMessage } from "@/lib/types";
 
 interface ApiResult<T> {
@@ -233,9 +233,11 @@ export default function MailPage() {
     );
   }
 
+  const isDetailOpen = composeOpen || !!selected;
+
   return (
     <div className="flex-1 flex bg-bg-page overflow-hidden">
-      <aside className="w-56 bg-panel-bg border-r border-panel-border flex flex-col">
+      <aside className="hidden md:flex w-56 bg-panel-bg border-r border-panel-border flex-col">
         <div className="p-4 border-b border-panel-border">
           <h1 className="font-bold text-text-primary flex items-center gap-2"><Mail size={18} /> 企业邮箱</h1>
           <select value={currentAccount?.id || ""} onChange={(e) => setAccountId(e.target.value)}
@@ -261,7 +263,27 @@ export default function MailPage() {
         </nav>
       </aside>
 
-      <section className="w-80 bg-panel-bg border-r border-panel-border flex flex-col">
+      <section className={`w-full md:w-80 bg-panel-bg border-r border-panel-border flex-col
+        ${isDetailOpen ? "hidden md:flex" : "flex"}`}>
+        <div className="md:hidden p-3 border-b border-panel-border space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="font-bold text-text-primary flex items-center gap-2"><Mail size={18} /> 企业邮箱</h1>
+            <button onClick={() => setComposeOpen(true)}
+              className="h-8 px-3 rounded-lg bg-primary text-white text-sm flex items-center gap-1.5">
+              <PenLine size={14} /> 写邮件
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <select value={currentAccount?.id || ""} onChange={(e) => setAccountId(e.target.value)}
+              className="h-9 rounded-lg border border-panel-border px-2 text-xs outline-none bg-panel-bg min-w-0">
+              {accounts.map((account) => <option key={account.id} value={account.id}>{account.address}</option>)}
+            </select>
+            <select value={folder} onChange={(e) => setFolder(e.target.value as MailFolder)}
+              className="h-9 rounded-lg border border-panel-border px-2 text-xs outline-none bg-panel-bg">
+              {folders.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+            </select>
+          </div>
+        </div>
         <div className="h-12 px-4 border-b border-panel-border flex items-center justify-between">
           <span className="font-medium text-text-primary">{folders.find((item) => item.key === folder)?.label}</span>
           <button onClick={loadMessages} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-list-hover">
@@ -292,10 +314,20 @@ export default function MailPage() {
         </div>
       </section>
 
-      <main className="flex-1 bg-panel-bg overflow-y-auto">
+      <main className={`w-full min-w-0 flex-1 bg-panel-bg overflow-y-auto
+        ${isDetailOpen ? "block" : "hidden md:block"}`}>
         {composeOpen ? (
-          <div className="max-w-3xl mx-auto p-6 space-y-4">
-            <h2 className="text-xl font-bold text-text-primary">写邮件</h2>
+          <div className="max-w-3xl mx-auto p-4 md:p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setComposeOpen(false)}
+                className="md:hidden h-8 px-2 rounded-md flex items-center gap-1.5 text-sm text-text-secondary hover:bg-list-hover"
+              >
+                <ArrowLeft size={16} />
+                返回邮件
+              </button>
+              <h2 className="text-xl font-bold text-text-primary">写邮件</h2>
+            </div>
             <input value={to} onChange={(e) => setTo(e.target.value)}
               placeholder="收件人，多个地址用英文逗号分隔"
               className="w-full h-10 rounded-lg border border-panel-border px-3 text-sm outline-none focus:border-primary" />
@@ -345,7 +377,14 @@ export default function MailPage() {
             </div>
           </div>
         ) : selected ? (
-          <article className="max-w-3xl mx-auto p-6">
+          <article className="max-w-3xl mx-auto p-4 md:p-6">
+            <button
+              onClick={() => setSelected(null)}
+              className="md:hidden mb-3 h-8 px-2 rounded-md flex items-center gap-1.5 text-sm text-text-secondary hover:bg-list-hover"
+            >
+              <ArrowLeft size={16} />
+              返回邮件
+            </button>
             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
               <h2 className="text-2xl font-bold text-text-primary">{selected.subject || "(无主题)"}</h2>
               <div className="flex gap-2 shrink-0">
@@ -389,7 +428,7 @@ export default function MailPage() {
             </div>
           </article>
         ) : (
-          <div className="h-full flex items-center justify-center text-text-placeholder">
+          <div className="h-full hidden md:flex items-center justify-center text-text-placeholder">
             选择一封邮件查看详情，或点击“写邮件”开始发信
           </div>
         )}

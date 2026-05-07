@@ -7,18 +7,27 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
-  FileText, Loader2, Plus, Table2,
+  ArrowLeft, FileText, Loader2, Plus, Table2,
   Search, MoreHorizontal, Trash2, LayoutGrid, Pencil,
 } from "lucide-react";
 import DocList from "@/components/docs/DocList";
-import DocEditor from "@/components/docs/DocEditor";
 import ShareDocModal from "@/components/docs/ShareDocModal";
 import { useOrg } from "@/lib/org-context";
 import type { Document as DocType, Base } from "@/lib/types";
 
 type ActiveTab = "docs" | "bases";
+
+const DocEditor = dynamic(() => import("@/components/docs/DocEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex-1 flex items-center justify-center bg-bg-page">
+      <Loader2 size={28} className="text-primary animate-spin" />
+    </div>
+  ),
+});
 
 export default function DocsPage() {
   const { currentOrg } = useOrg();
@@ -32,6 +41,7 @@ export default function DocsPage() {
   const [docs, setDocs] = useState<DocType[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<DocType | null>(null);
   const [docsLoading, setDocsLoading] = useState(true);
+  const [selectedDocLoading, setSelectedDocLoading] = useState(false);
 
   /* ==================== 多维表格相关状态 ==================== */
   const [bases, setBases] = useState<Base[]>([]);
@@ -47,7 +57,7 @@ export default function DocsPage() {
     if (!currentOrg) { setDocsLoading(false); return; }
     setDocsLoading(true);
     setSelectedDoc(null);
-    fetch(`/api/docs?org_id=${currentOrg.id}`)
+    fetch(`/api/docs?org_id=${currentOrg.id}&limit=50`)
       .then((res) => res.json() as Promise<{ success: boolean; data?: DocType[] }>)
       .then((json) => { if (json.success && json.data) setDocs(json.data); })
       .catch(() => {})
@@ -72,6 +82,20 @@ export default function DocsPage() {
         setSelectedDoc(json.data);
       }
     } catch { /* ignore */ }
+  };
+
+  const handleSelectDoc = async (doc: DocType) => {
+    setSelectedDoc(doc);
+    setSelectedDocLoading(true);
+    try {
+      const res = await fetch(`/api/docs/${doc.id}`);
+      const json = (await res.json()) as { success: boolean; data?: DocType };
+      if (json.success && json.data) {
+        setSelectedDoc(json.data);
+        setDocs((prev) => prev.map((item) => (item.id === json.data!.id ? { ...item, ...json.data! } : item)));
+      }
+    } catch { /* ignore */ }
+    finally { setSelectedDocLoading(false); }
   };
 
   const handleSaveDoc = async (content: string, title: string) => {
@@ -196,7 +220,7 @@ export default function DocsPage() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* 顶部 Tab 栏 */}
-      <div className="h-12 px-6 flex items-center gap-1 border-b border-panel-border bg-panel-bg shrink-0">
+      <div className="h-12 px-3 md:px-6 flex items-center gap-1 border-b border-panel-border bg-panel-bg shrink-0 overflow-x-auto">
         <button onClick={() => setActiveTab("docs")}
           className={`px-4 h-full text-sm font-medium border-b-2 transition-colors -mb-px flex items-center gap-1.5
             ${activeTab === "docs" ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-text-primary"}`}>
@@ -218,16 +242,46 @@ export default function DocsPage() {
           <DocList
             documents={docs}
             selectedId={selectedDoc?.id}
-            onSelect={setSelectedDoc}
+            onSelect={handleSelectDoc}
             onCreateNew={handleCreateDoc}
+            hiddenOnMobile={!!selectedDoc || selectedDocLoading}
             onShare={setShareDoc}
             onRename={handleRenameDoc}
             onDelete={handleDeleteDoc}
           />
-          {selectedDoc ? (
-            <DocEditor document={selectedDoc} onSave={handleSaveDoc} onShare={setShareDoc} />
+          {selectedDocLoading ? (
+            <div className="w-full min-w-0 flex-1 flex flex-col bg-bg-page">
+              <div className="md:hidden h-11 px-3 flex items-center border-b border-panel-border bg-panel-bg">
+                <button
+                  onClick={() => {
+                    setSelectedDoc(null);
+                    setSelectedDocLoading(false);
+                  }}
+                  className="h-8 px-2 rounded-md flex items-center gap-1.5 text-sm text-text-secondary hover:bg-list-hover"
+                >
+                  <ArrowLeft size={16} />
+                  返回文档
+                </button>
+              </div>
+              <div className="flex-1 flex items-center justify-center">
+                <Loader2 size={28} className="text-primary animate-spin" />
+              </div>
+            </div>
+          ) : selectedDoc ? (
+            <div className="w-full min-w-0 flex-1 flex flex-col overflow-hidden">
+              <div className="md:hidden h-11 px-3 flex items-center border-b border-panel-border bg-panel-bg shrink-0">
+                <button
+                  onClick={() => setSelectedDoc(null)}
+                  className="h-8 px-2 rounded-md flex items-center gap-1.5 text-sm text-text-secondary hover:bg-list-hover"
+                >
+                  <ArrowLeft size={16} />
+                  返回文档
+                </button>
+              </div>
+              <DocEditor document={selectedDoc} onSave={handleSaveDoc} onShare={setShareDoc} />
+            </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center bg-bg-page">
+            <div className="hidden md:flex flex-1 flex-col items-center justify-center bg-bg-page">
               <div className="w-16 h-16 rounded-2xl bg-primary-light flex items-center justify-center mb-4">
                 <FileText size={32} className="text-primary" />
               </div>
@@ -240,9 +294,9 @@ export default function DocsPage() {
       {/* 多维表格 Tab 内容 */}
       {activeTab === "bases" && (
         <div className="flex-1 bg-bg-page overflow-y-auto">
-          <div className="max-w-5xl mx-auto px-6 py-8">
+          <div className="max-w-5xl mx-auto px-4 md:px-6 py-5 md:py-8">
             {/* 操作栏 */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                   <LayoutGrid size={22} className="text-primary" />
@@ -253,7 +307,7 @@ export default function DocsPage() {
                 </div>
               </div>
               <button onClick={handleCreateBase} disabled={creating}
-                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium
                   hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-sm">
                 {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
                 新建多维表格
@@ -316,7 +370,7 @@ export default function DocsPage() {
                       {renamingBaseId !== base.id && (
                         <button onClick={(e) => { e.stopPropagation(); setMenuId(menuId === base.id ? null : base.id); }}
                           className="w-7 h-7 rounded-md flex items-center justify-center text-text-placeholder
-                            hover:bg-list-hover opacity-0 group-hover:opacity-100 transition-all">
+                            hover:bg-list-hover opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
                           <MoreHorizontal size={14} />
                         </button>
                       )}

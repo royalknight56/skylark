@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, use } from "react";
+import { useState, useEffect, useCallback, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Loader2, ChevronLeft, Plus, Table2, Columns3,
@@ -46,6 +46,48 @@ interface BaseDetail extends Base {
   tables: TableWithDetails[];
 }
 
+type PendingRecordEdits = Record<string, { data: Record<string, unknown>; updatedAt: string }>;
+
+const RECORD_SAVE_DELAY_MS = 600;
+const VIEW_SAVE_DELAY_MS = 700;
+
+function pendingRecordKey(baseId: string) {
+  return `skylark:base-record-edits:${baseId}`;
+}
+
+function readPendingRecordEdits(baseId: string): PendingRecordEdits {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(pendingRecordKey(baseId));
+    return raw ? (JSON.parse(raw) as PendingRecordEdits) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePendingRecordEdits(baseId: string, pending: Map<string, { data: Record<string, unknown>; updatedAt: string }>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(pendingRecordKey(baseId), JSON.stringify(Object.fromEntries(pending)));
+  } catch {
+    // localStorage may be unavailable or full; editing should continue.
+  }
+}
+
+function applyPendingRecordEdits(base: BaseDetail, pending: Map<string, { data: Record<string, unknown>; updatedAt: string }>): BaseDetail {
+  if (pending.size === 0) return base;
+  return {
+    ...base,
+    tables: base.tables.map((table) => ({
+      ...table,
+      records: table.records.map((record) => {
+        const edit = pending.get(record.id);
+        return edit ? { ...record, data: edit.data, updated_at: edit.updatedAt } : record;
+      }),
+    })),
+  };
+}
+
 export default function BaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -62,6 +104,88 @@ export default function BaseDetailPage({ params }: { params: Promise<{ id: strin
   const [tableMenuId, setTableMenuId] = useState<string | null>(null);
   const [renamingTableId, setRenamingTableId] = useState<string | null>(null);
   const [renameTableName, setRenameTableName] = useState("");
+  const pendingRecordEditsRef = useRef(new Map<string, { data: Record<string, unknown>; updatedAt: string }>());
+  const recordSaveTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const viewSaveTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  const updateTableRecords = useCallback((tableId: string, updater: (records: BaseRecord[]) => BaseRecord[]) => {
+    setBase((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        tables: prev.tables.map((table) =>
+          table.id === tableId ? { ...table, records: updater(table.records) } : table
+        ),
+      };
+    });
+  }, []);
+
+  const updateViewConfigLocal = useCallback((viewId: string, config: BaseViewConfig) => {
+    setBase((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        tables: prev.tables.map((table) => ({
+          ...table,
+          views: table.views.map((view) => view.id === viewId ? { ...view, config } : view),
+        })),
+      };
+    });
+  }, []);
+
+  const scheduleRecordSave = useCallback((recordId: string, data: Record<string, unknown>) => {
+    const updatedAt = new Date().toISOString();
+    pendingRecordEditsRef.current.set(recordId, { data, updatedAt });
+    writePendingRecordEdits(id, pendingRecordEditsRef.current);
+
+    const existing = recordSaveTimersRef.current.get(recordId);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/bases/${id}/records`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ record_id: recordId, data }),
+        });
+        if (!res.ok) throw new Error("save failed");
+
+        const latest = pendingRecordEditsRef.current.get(recordId);
+        if (latest && JSON.stringify(latest.data) === JSON.stringify(data)) {
+          pendingRecordEditsRef.current.delete(recordId);
+          writePendingRecordEdits(id, pendingRecordEditsRef.current);
+        }
+      } catch {
+        pendingRecordEditsRef.current.set(recordId, { data, updatedAt: new Date().toISOString() });
+        writePendingRecordEdits(id, pendingRecordEditsRef.current);
+      } finally {
+        recordSaveTimersRef.current.delete(recordId);
+      }
+    }, RECORD_SAVE_DELAY_MS);
+
+    recordSaveTimersRef.current.set(recordId, timer);
+  }, [id]);
+
+  const scheduleViewSave = useCallback((viewId: string, config: BaseViewConfig) => {
+    const existing = viewSaveTimersRef.current.get(viewId);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(async () => {
+      try {
+        await fetch(`/api/bases/${id}/views`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ view_id: viewId, config }),
+        });
+      } catch {
+        // View config remains optimistic locally; the next successful edit will retry latest config.
+      } finally {
+        viewSaveTimersRef.current.delete(viewId);
+      }
+    }, VIEW_SAVE_DELAY_MS);
+
+    viewSaveTimersRef.current.set(viewId, timer);
+  }, [id]);
 
   /** 加载数据 */
   const loadBase = useCallback(async () => {
@@ -69,20 +193,31 @@ export default function BaseDetailPage({ params }: { params: Promise<{ id: strin
       const res = await fetch(`/api/bases/${id}`);
       const json = (await res.json()) as { success: boolean; data?: BaseDetail };
       if (json.success && json.data) {
-        setBase(json.data);
-        setBaseName(json.data.name);
-        if (!activeTableId && json.data.tables.length > 0) {
-          setActiveTableId(json.data.tables[0].id);
-          if (json.data.tables[0].views.length > 0) {
-            setActiveViewId(json.data.tables[0].views[0].id);
+        const pending = new Map(Object.entries(readPendingRecordEdits(id)));
+        pendingRecordEditsRef.current = pending;
+        const nextBase = applyPendingRecordEdits(json.data, pending);
+        setBase(nextBase);
+        setBaseName(nextBase.name);
+        pending.forEach((edit, recordId) => scheduleRecordSave(recordId, edit.data));
+        if (!activeTableId && nextBase.tables.length > 0) {
+          setActiveTableId(nextBase.tables[0].id);
+          if (nextBase.tables[0].views.length > 0) {
+            setActiveViewId(nextBase.tables[0].views[0].id);
           }
         }
       }
     } catch { /* ignore */ }
     finally { setLoading(false); }
-  }, [id, activeTableId]);
+  }, [id, activeTableId, scheduleRecordSave]);
 
   useEffect(() => { loadBase(); }, [loadBase]);
+
+  useEffect(() => {
+    return () => {
+      recordSaveTimersRef.current.forEach((timer) => clearTimeout(timer));
+      viewSaveTimersRef.current.forEach((timer) => clearTimeout(timer));
+    };
+  }, []);
 
   const activeTable = base?.tables.find((t) => t.id === activeTableId) || null;
   const activeView = activeTable?.views.find((v) => v.id === activeViewId) || null;
@@ -185,44 +320,51 @@ export default function BaseDetailPage({ params }: { params: Promise<{ id: strin
   /** 新增记录 */
   const handleAddRecord = useCallback(async (initialData?: Record<string, unknown>) => {
     if (!activeTableId) return;
-    await fetch(`/api/bases/${id}/records`, {
+    const res = await fetch(`/api/bases/${id}/records`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ table_id: activeTableId, data: initialData || {} }),
     });
-    await loadBase();
-  }, [id, activeTableId, loadBase]);
+    const json = (await res.json()) as { success: boolean; data?: BaseRecord };
+    if (json.success && json.data) {
+      updateTableRecords(activeTableId, (records) => [...records, json.data!]);
+    }
+  }, [id, activeTableId, updateTableRecords]);
 
   /** 更新记录 */
   const handleUpdateRecord = useCallback(async (recordId: string, data: Record<string, unknown>) => {
-    await fetch(`/api/bases/${id}/records`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ record_id: recordId, data }),
-    });
-    await loadBase();
-  }, [id, loadBase]);
+    if (!activeTableId) return;
+    const updatedAt = new Date().toISOString();
+    updateTableRecords(activeTableId, (records) =>
+      records.map((record) => record.id === recordId ? { ...record, data, updated_at: updatedAt } : record)
+    );
+    scheduleRecordSave(recordId, data);
+  }, [activeTableId, updateTableRecords, scheduleRecordSave]);
 
   /** 删除记录 */
   const handleDeleteRecords = useCallback(async (recordIds: string[]) => {
+    if (!activeTableId) return;
+    updateTableRecords(activeTableId, (records) => records.filter((record) => !recordIds.includes(record.id)));
+    for (const recordId of recordIds) {
+      const timer = recordSaveTimersRef.current.get(recordId);
+      if (timer) clearTimeout(timer);
+      recordSaveTimersRef.current.delete(recordId);
+      pendingRecordEditsRef.current.delete(recordId);
+    }
+    writePendingRecordEdits(id, pendingRecordEditsRef.current);
     await fetch(`/api/bases/${id}/records`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ record_ids: recordIds }),
     });
-    await loadBase();
-  }, [id, loadBase]);
+  }, [id, activeTableId, updateTableRecords]);
 
   /** 更新视图 */
   const handleUpdateView = useCallback(async (config: BaseViewConfig) => {
     if (!activeViewId) return;
-    await fetch(`/api/bases/${id}/views`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ view_id: activeViewId, config }),
-    });
-    await loadBase();
-  }, [id, activeViewId, loadBase]);
+    updateViewConfigLocal(activeViewId, config);
+    scheduleViewSave(activeViewId, config);
+  }, [activeViewId, updateViewConfigLocal, scheduleViewSave]);
 
   /** 新建视图 */
   const handleCreateView = async (type: BaseViewType) => {

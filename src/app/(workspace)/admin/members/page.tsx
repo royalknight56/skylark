@@ -515,11 +515,11 @@ export default function AdminMembersPage() {
   }
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-w-0">
       {/* 左侧主内容 */}
       <div className="flex-1 min-w-0">
         {/* 头部 */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div>
             <h1 className="text-xl font-bold text-text-primary flex items-center gap-2">
               <Users size={22} className="text-primary" />
@@ -531,7 +531,7 @@ export default function AdminMembersPage() {
             </p>
           </div>
           <button onClick={() => setShowInviteModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium
               hover:bg-primary/90 transition-colors">
             <UserPlus size={16} /> 邀请成员
           </button>
@@ -1111,7 +1111,7 @@ function MemberDetailPanel({
 }: DetailPanelProps) {
   const roleConfig = ROLE_CONFIG[member.role];
   return (
-    <div className="fixed top-0 right-0 h-full w-96 bg-panel-bg shadow-2xl z-40 flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
+    <div className="fixed top-0 right-0 h-full w-full sm:w-96 bg-panel-bg shadow-2xl z-40 flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
       <div className="flex items-center justify-between px-4 py-3 border-b border-panel-border">
         <h3 className="text-sm font-semibold text-text-primary">成员详情</h3>
         <div className="flex items-center gap-1">

@@ -17,9 +17,10 @@ export async function GET(request: NextRequest) {
 
     const orgId = request.nextUrl.searchParams.get("org_id");
     if (!orgId) return NextResponse.json({ success: false, error: "缺少 org_id" }, { status: 400 });
+    const limit = Number.parseInt(request.nextUrl.searchParams.get("limit") || "50", 10);
 
     const { env } = await getCloudflareContext();
-    const conversations = await getUserConversations(env.DB, userId, orgId);
+    const conversations = await getUserConversations(env.DB, userId, orgId, limit);
     return NextResponse.json({ success: true, data: conversations });
   } catch (error) {
     return NextResponse.json({ success: false, error: String(error) }, { status: 500 });

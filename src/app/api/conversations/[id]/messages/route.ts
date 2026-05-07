@@ -41,7 +41,10 @@ export async function GET(
     const { id } = await params;
     const { env } = await getCloudflareContext();
     const searchParams = request.nextUrl.searchParams;
-    const limit = parseInt(searchParams.get("limit") || "50");
+    const requestedLimit = Number.parseInt(searchParams.get("limit") || "50", 10);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(requestedLimit, 1), 100)
+      : 50;
     const before = searchParams.get("before") || undefined;
 
     const messages = await getMessages(env.DB, id, limit, before, userId);

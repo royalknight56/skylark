@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import { useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import ConversationList from "@/components/messages/ConversationList";
 import CreateGroupModal from "@/components/messages/CreateGroupModal";
 import JoinGroupModal from "@/components/messages/JoinGroupModal";
@@ -32,12 +33,14 @@ export function useMessages() {
 
 export default function MessagesLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { currentOrg } = useOrg();
   const { lastEvent } = useNotification();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showJoinGroup, setShowJoinGroup] = useState(false);
   const lastEventIdRef = useRef<string | null>(null);
+  const isConversationOpen = pathname !== "/messages";
 
   const loadConversations = useCallback(async () => {
     if (!currentOrg) return;
@@ -63,6 +66,7 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
     <MessagesContext.Provider value={{ conversations, refreshConversations: loadConversations }}>
       <ConversationList
         conversations={conversations}
+        hiddenOnMobile={isConversationOpen}
         onClickCreate={() => setShowCreateGroup(true)}
         onClickJoin={() => setShowJoinGroup(true)}
       />

@@ -124,10 +124,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
       {/* 管理后台侧栏 */}
-      <aside className="w-56 bg-panel-bg border-r border-panel-border flex flex-col shrink-0">
-        <div className="px-4 py-5 border-b border-panel-border">
+      <aside className="w-full md:w-56 max-h-48 md:max-h-none bg-panel-bg border-b md:border-b-0 md:border-r border-panel-border flex flex-col shrink-0">
+        <div className="px-4 py-3 md:py-5 border-b border-panel-border">
           <div className="flex items-center gap-2 mb-1">
             <Building2 size={18} className="text-primary" />
             <h2 className="text-sm font-bold text-text-primary">管理后台</h2>
@@ -140,13 +140,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           )}
         </div>
 
-        <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 py-2 px-2 flex md:block gap-1 md:space-y-0.5 overflow-x-auto md:overflow-x-visible md:overflow-y-auto">
           {visibleNav.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
             return (
               <Link key={item.href} href={item.href}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors shrink-0
                   ${active
                     ? "bg-primary/10 text-primary font-medium"
                     : "text-text-secondary hover:bg-list-hover hover:text-text-primary"
@@ -158,7 +158,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           })}
         </nav>
 
-        <div className="px-2 py-3 border-t border-panel-border">
+        <div className="hidden md:block px-2 py-3 border-t border-panel-border">
           <Link href="/messages"
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-list-hover transition-colors">
             <ArrowLeft size={16} /> 返回工作区
@@ -166,7 +166,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </aside>
 
-      <div className="flex-1 overflow-y-auto bg-bg-page p-6">
+      <div className="flex-1 min-w-0 overflow-y-auto bg-bg-page p-4 md:p-6">
         {children}
       </div>
     </div>

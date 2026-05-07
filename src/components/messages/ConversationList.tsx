@@ -15,6 +15,8 @@ import type { Conversation } from "@/lib/types";
 
 interface ConversationListProps {
   conversations: Conversation[];
+  /** 移动端隐藏列表，给聊天详情让出整屏 */
+  hiddenOnMobile?: boolean;
   /** 点击创建群聊按钮 */
   onClickCreate?: () => void;
   /** 点击加入群组按钮 */
@@ -40,7 +42,7 @@ function formatTime(dateStr?: string): string {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
-export default function ConversationList({ conversations, onClickCreate, onClickJoin }: ConversationListProps) {
+export default function ConversationList({ conversations, hiddenOnMobile = false, onClickCreate, onClickJoin }: ConversationListProps) {
   const pathname = usePathname();
   const [searchText, setSearchText] = useState("");
 
@@ -51,7 +53,10 @@ export default function ConversationList({ conversations, onClickCreate, onClick
   });
 
   return (
-    <div className="w-72 h-full border-r border-panel-border bg-panel-bg flex flex-col flex-shrink-0">
+    <div
+      className={`w-full md:w-72 h-full border-r border-panel-border bg-panel-bg flex-col flex-shrink-0
+        ${hiddenOnMobile ? "hidden md:flex" : "flex"}`}
+    >
       {/* 顶部标题栏 */}
       <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 border-b border-panel-border">
         <h2 className="text-base font-semibold text-text-primary">消息</h2>

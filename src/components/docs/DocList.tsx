@@ -14,6 +14,7 @@ interface DocListProps {
   selectedId?: string;
   onSelect: (doc: Document) => void;
   onCreateNew: (type: "doc" | "sheet") => void;
+  hiddenOnMobile?: boolean;
   onShare?: (doc: Document) => void;
   onRename?: (doc: Document, newTitle: string) => void;
   onDelete?: (doc: Document) => void;
@@ -33,7 +34,7 @@ function formatUpdatedAt(dateStr: string): string {
   return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
 }
 
-export default function DocList({ documents, selectedId, onSelect, onCreateNew, onShare, onRename, onDelete }: DocListProps) {
+export default function DocList({ documents, selectedId, onSelect, onCreateNew, hiddenOnMobile = false, onShare, onRename, onDelete }: DocListProps) {
   const [searchText, setSearchText] = useState("");
   const [showNewMenu, setShowNewMenu] = useState(false);
   const [menuDocId, setMenuDocId] = useState<string | null>(null);
@@ -67,7 +68,8 @@ export default function DocList({ documents, selectedId, onSelect, onCreateNew, 
   );
 
   return (
-    <div className="w-72 h-full border-r border-panel-border bg-panel-bg flex flex-col flex-shrink-0">
+    <div className={`w-full md:w-72 h-full border-r border-panel-border bg-panel-bg flex-col flex-shrink-0
+      ${hiddenOnMobile ? "hidden md:flex" : "flex"}`}>
       {/* 顶部 */}
       <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 border-b border-panel-border">
         <h2 className="text-base font-semibold text-text-primary">云文档</h2>

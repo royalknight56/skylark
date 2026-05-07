@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -40,8 +40,48 @@ import "./editor/styles.css";
 
 interface DocEditorProps {
   document: Document;
-  onSave?: (content: string, title: string) => void;
+  onSave?: (content: string, title: string) => void | Promise<void>;
   onShare?: (doc: Document) => void;
+}
+
+interface DocDraft {
+  title: string;
+  content: string;
+  updatedAt: string;
+  serverUpdatedAt: string;
+}
+
+const AUTOSAVE_DELAY_MS = 1800;
+const DRAFT_WRITE_DELAY_MS = 300;
+
+function getDraftKey(docId: string) {
+  return `skylark:doc-draft:${docId}`;
+}
+
+function readDraft(docId: string): DocDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(getDraftKey(docId));
+    return raw ? (JSON.parse(raw) as DocDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(docId: string, draft: DocDraft) {
+  try {
+    window.localStorage.setItem(getDraftKey(docId), JSON.stringify(draft));
+  } catch {
+    // localStorage may be unavailable or full; editing should continue.
+  }
+}
+
+function clearDraft(docId: string) {
+  try {
+    window.localStorage.removeItem(getDraftKey(docId));
+  } catch {
+    // ignore
+  }
 }
 
 function formatTime(dateStr: string): string {
@@ -61,6 +101,12 @@ export default function DocEditor({ document: doc, onSave, onShare }: DocEditorP
   const [showMenu, setShowMenu] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
+  const [hasLocalDraft, setHasLocalDraft] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const isHydratingRef = useRef(false);
+  const latestRef = useRef({ title: doc.title, content: doc.content || "" });
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -100,14 +146,81 @@ export default function DocEditor({ document: doc, onSave, onShare }: DocEditorP
     },
   });
 
+  const persistDraft = useCallback((content: string, nextTitle = title) => {
+    latestRef.current = { title: nextTitle, content };
+    setHasLocalDraft(true);
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      writeDraft(doc.id, {
+        title: latestRef.current.title,
+        content: latestRef.current.content,
+        updatedAt: new Date().toISOString(),
+        serverUpdatedAt: doc.updated_at,
+      });
+    }, DRAFT_WRITE_DELAY_MS);
+  }, [doc.id, doc.updated_at, title]);
+
   /* 文档切换时更新内容 */
   useEffect(() => {
-    setTitle(doc.title);
     setLastSaved(doc.updated_at);
+    setSaveError(false);
+
+    const draft = readDraft(doc.id);
+    const draftIsNewer =
+      draft && (!draft.serverUpdatedAt || new Date(draft.updatedAt).getTime() > new Date(doc.updated_at).getTime());
+    const nextTitle = draftIsNewer ? draft.title : doc.title;
+    const nextContent = draftIsNewer ? draft.content : (doc.content || "");
+
+    setTitle(nextTitle);
+    setHasLocalDraft(!!draftIsNewer);
+    latestRef.current = { title: nextTitle, content: nextContent };
+
     if (editor && doc.content !== undefined) {
-      editor.commands.setContent(doc.content || "");
+      isHydratingRef.current = true;
+      editor.commands.setContent(nextContent);
+      queueMicrotask(() => { isHydratingRef.current = false; });
     }
-  }, [doc, editor]);
+  }, [doc.id, doc.title, doc.content, doc.updated_at, editor]);
+
+  /* 内容变更：先本地缓存，再防抖自动保存 */
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleUpdate = () => {
+      if (isHydratingRef.current) return;
+      const content = editor.getHTML();
+      persistDraft(content);
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = setTimeout(() => {
+        handleSave();
+      }, AUTOSAVE_DELAY_MS);
+    };
+
+    editor.on("update", handleUpdate);
+    return () => {
+      editor.off("update", handleUpdate);
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, [editor, persistDraft]);
+
+  /* 关闭页面前尽量同步最后一次本地草稿写入 */
+  useEffect(() => {
+    const flushDraft = () => {
+      if (!hasLocalDraft) return;
+      writeDraft(doc.id, {
+        title: latestRef.current.title,
+        content: latestRef.current.content,
+        updatedAt: new Date().toISOString(),
+        serverUpdatedAt: doc.updated_at,
+      });
+    };
+    window.addEventListener("beforeunload", flushDraft);
+    return () => {
+      flushDraft();
+      window.removeEventListener("beforeunload", flushDraft);
+    };
+  }, [doc.id, doc.updated_at, hasLocalDraft]);
 
   /* 阅读/编辑模式切换 */
   useEffect(() => {
@@ -137,22 +250,67 @@ export default function DocEditor({ document: doc, onSave, onShare }: DocEditorP
   /** 保存文档 */
   const handleSave = useCallback(async () => {
     if (!editor) return;
+    if (draftTimerRef.current) {
+      clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+    }
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
     setIsSaving(true);
     const content = editor.getHTML();
+    const nextTitle = latestRef.current.title || title;
+    const savedSnapshot = { title: nextTitle, content };
+    latestRef.current = { title: nextTitle, content };
     try {
       if (onSave) {
-        onSave(content, title);
+        await onSave(content, nextTitle);
       } else {
-        await fetch(`/api/docs/${doc.id}`, {
+        const res = await fetch(`/api/docs/${doc.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content, title }),
+          body: JSON.stringify({ content, title: nextTitle }),
         });
+        if (!res.ok) throw new Error("save failed");
       }
+      const latest = latestRef.current;
+      if (latest.title === savedSnapshot.title && latest.content === savedSnapshot.content) {
+        clearDraft(doc.id);
+        setHasLocalDraft(false);
+      } else {
+        writeDraft(doc.id, {
+          title: latest.title,
+          content: latest.content,
+          updatedAt: new Date().toISOString(),
+          serverUpdatedAt: doc.updated_at,
+        });
+        setHasLocalDraft(true);
+      }
+      setSaveError(false);
       setLastSaved(new Date().toISOString());
-    } catch { /* 静默失败 */ }
+    } catch {
+      writeDraft(doc.id, {
+        title: nextTitle,
+        content,
+        updatedAt: new Date().toISOString(),
+        serverUpdatedAt: doc.updated_at,
+      });
+      setHasLocalDraft(true);
+      setSaveError(true);
+    }
     finally { setIsSaving(false); }
-  }, [editor, doc.id, title, onSave]);
+  }, [editor, doc.id, doc.updated_at, title, onSave]);
+
+  const handleTitleChange = (nextTitle: string) => {
+    setTitle(nextTitle);
+    const content = editor?.getHTML() || latestRef.current.content;
+    persistDraft(content, nextTitle);
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      handleSave();
+    }, AUTOSAVE_DELAY_MS);
+  };
 
   /** 插入链接回调 */
   const handleInsertLink = useCallback((url: string, text: string) => {
@@ -190,7 +348,7 @@ export default function DocEditor({ document: doc, onSave, onShare }: DocEditorP
         <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
           <input
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => handleTitleChange(e.target.value)}
             readOnly={isReadonly}
             className="text-sm md:text-base font-semibold text-text-primary bg-transparent border-none outline-none flex-1 min-w-0"
             placeholder="无标题文档"
@@ -200,7 +358,15 @@ export default function DocEditor({ document: doc, onSave, onShare }: DocEditorP
           {/* 保存时间 — 移动端隐藏 */}
           <span className="text-xs text-text-placeholder hidden md:flex items-center gap-1">
             <Clock size={12} />
-            {lastSaved ? `保存于 ${formatTime(lastSaved)}` : "未保存"}
+            {isSaving
+              ? "保存中..."
+              : saveError
+                ? "离线草稿已保留"
+                : hasLocalDraft
+                  ? "本地草稿待同步"
+                  : lastSaved
+                    ? `保存于 ${formatTime(lastSaved)}`
+                    : "未保存"}
           </span>
 
           {/* 阅读/编辑模式切换 */}

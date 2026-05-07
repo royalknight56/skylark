@@ -9,7 +9,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  MessageSquare, Phone, Video, Mail, Loader2,
+  ArrowLeft, MessageSquare, Phone, Video, Mail, Loader2,
   Building2, Briefcase, MapPin, Hash, UserCheck,
   Smartphone, Shield, CalendarDays,
 } from "lucide-react";
@@ -19,6 +19,7 @@ import type { User, OrgMember } from "@/lib/types";
 
 interface ContactCardProps {
   user: User;
+  onBack?: () => void;
 }
 
 const statusLabel: Record<string, string> = {
@@ -46,7 +47,7 @@ const genderLabel: Record<string, string> = {
   female: "女",
 };
 
-export default function ContactCard({ user }: ContactCardProps) {
+export default function ContactCard({ user, onBack }: ContactCardProps) {
   const router = useRouter();
   const { currentOrg } = useOrg();
   const [sending, setSending] = useState(false);
@@ -106,8 +107,19 @@ export default function ContactCard({ user }: ContactCardProps) {
   };
 
   return (
-    <div className="flex-1 flex items-start justify-center bg-bg-page p-8 overflow-y-auto">
+    <div className="w-full min-w-0 flex-1 flex items-start justify-center bg-bg-page p-4 md:p-8 overflow-y-auto">
       <div className="w-full max-w-md bg-panel-bg rounded-xl shadow-sm overflow-hidden">
+        {onBack && (
+          <div className="md:hidden h-11 px-3 flex items-center border-b border-panel-border">
+            <button
+              onClick={onBack}
+              className="h-8 px-2 rounded-md flex items-center gap-1.5 text-sm text-text-secondary hover:bg-list-hover"
+            >
+              <ArrowLeft size={16} />
+              返回通讯录
+            </button>
+          </div>
+        )}
         {/* 头部背景 + 头像 */}
         <div className="h-28 bg-linear-to-br from-primary via-blue-400 to-cyan-300 relative">
           {/* 状态标签 */}

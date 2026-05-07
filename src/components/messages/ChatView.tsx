@@ -7,7 +7,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Phone, Video, Settings, Users as UsersIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Phone, Video, Settings, Users as UsersIcon } from "lucide-react";
 import MessageBubble from "./MessageBubble";
 import MessageInput from "./MessageInput";
 import GroupSettingsPanel from "./GroupSettingsPanel";
@@ -55,6 +56,7 @@ export default function ChatView({
   memberCount,
   onMarkRead,
 }: ChatViewProps) {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [conv, setConv] = useState<Conversation>(conversation);
   const [showSettings, setShowSettings] = useState(false);
@@ -415,15 +417,22 @@ export default function ChatView({
   };
 
   return (
-    <div className="flex-1 flex overflow-hidden">
-      <div className="flex-1 flex flex-col bg-bg-page overflow-hidden">
+    <div className="w-full min-w-0 flex-1 flex overflow-hidden">
+      <div className="w-full min-w-0 flex-1 flex flex-col bg-bg-page overflow-hidden">
       {/* 聊天顶栏 */}
       <div className="h-14 px-4 flex items-center justify-between border-b border-panel-border bg-panel-bg shrink-0">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={() => router.push("/messages")}
+            className="md:hidden w-8 h-8 -ml-2 rounded-lg flex items-center justify-center text-text-secondary hover:bg-list-hover transition-colors"
+            title="返回会话列表"
+          >
+            <ArrowLeft size={20} />
+          </button>
           <Avatar name={displayName} avatarUrl={conv.avatar_url} size="sm" />
-          <div>
-            <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
-              {displayName}
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2 min-w-0">
+              <span className="truncate">{displayName}</span>
               {conv.is_public && (
                 <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded font-normal">公开</span>
               )}
@@ -433,14 +442,14 @@ export default function ChatView({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          <button className="w-8 h-8 rounded-lg flex items-center justify-center text-text-secondary hover:bg-list-hover transition-colors">
+        <div className="flex items-center gap-1 shrink-0">
+          <button className="hidden sm:flex w-8 h-8 rounded-lg items-center justify-center text-text-secondary hover:bg-list-hover transition-colors">
             <Phone size={18} />
           </button>
-          <button className="w-8 h-8 rounded-lg flex items-center justify-center text-text-secondary hover:bg-list-hover transition-colors">
+          <button className="hidden sm:flex w-8 h-8 rounded-lg items-center justify-center text-text-secondary hover:bg-list-hover transition-colors">
             <Video size={18} />
           </button>
-          <button className="w-8 h-8 rounded-lg flex items-center justify-center text-text-secondary hover:bg-list-hover transition-colors">
+          <button className="hidden sm:flex w-8 h-8 rounded-lg items-center justify-center text-text-secondary hover:bg-list-hover transition-colors">
             <UsersIcon size={18} />
           </button>
           {conv.type === "group" && (

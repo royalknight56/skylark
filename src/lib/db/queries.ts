@@ -295,8 +295,10 @@ export async function findDirectConversation(
 export async function getUserConversations(
   db: D1Database,
   userId: string,
-  orgId: string
+  orgId: string,
+  limit = 50
 ): Promise<Conversation[]> {
+  const pageSize = Math.min(Math.max(limit, 1), 100);
   const result = await db
     .prepare(
       `SELECT c.*,
@@ -319,9 +321,10 @@ export async function getUserConversations(
         ON c.id = cm2.conversation_id AND cm2.user_id != ? AND c.type = 'direct'
       LEFT JOIN users peer ON cm2.user_id = peer.id
       WHERE cm.user_id = ? AND c.org_id = ?
-      ORDER BY COALESCE(m.created_at, c.updated_at) DESC`
+      ORDER BY COALESCE(m.created_at, c.updated_at) DESC
+      LIMIT ?`
     )
-    .bind(userId, userId, userId, userId, orgId)
+    .bind(userId, userId, userId, userId, orgId, pageSize)
     .all<Conversation & { peer_name: string | null; peer_avatar: string | null; unread_count: number; last_message_recalled: number | null }>();
 
   return result.results.map((row) => ({
@@ -1423,16 +1426,21 @@ export async function getCalendarEventDetail(
 export async function getDocuments(
   db: D1Database,
   orgId: string,
-  userId: string
+  userId: string,
+  limit = 50
 ): Promise<Document[]> {
+  const pageSize = Math.min(Math.max(limit, 1), 100);
   const result = await db
     .prepare(
-      `SELECT d.*, u.name as creator_name FROM documents d
+      `SELECT d.id, d.org_id, d.title, d.type, d.creator_id, d.r2_key, d.created_at, d.updated_at,
+              u.name as creator_name
+       FROM documents d
        JOIN users u ON d.creator_id = u.id
        WHERE d.org_id = ? AND d.creator_id = ?
-       ORDER BY d.updated_at DESC`
+       ORDER BY d.updated_at DESC
+       LIMIT ?`
     )
-    .bind(orgId, userId)
+    .bind(orgId, userId, pageSize)
     .all<Document & { creator_name: string }>();
 
   return result.results.map((row) => ({
@@ -2229,37 +2237,35 @@ export async function getOrgStats(
   db: D1Database,
   orgId: string
 ): Promise<OrgStats> {
-  const members = await db
-    .prepare('SELECT COUNT(*) as cnt FROM org_members WHERE org_id = ?')
-    .bind(orgId)
-    .first<{ cnt: number }>();
-
-  const newMembers = await db
-    .prepare(
-      `SELECT COUNT(*) as cnt FROM org_members
-       WHERE org_id = ? AND joined_at >= datetime('now', '-7 days')`
-    )
-    .bind(orgId)
-    .first<{ cnt: number }>();
-
-  const messages = await db
-    .prepare(
-      `SELECT COUNT(*) as cnt FROM messages m
-       JOIN conversations c ON m.conversation_id = c.id
-       WHERE c.org_id = ?`
-    )
-    .bind(orgId)
-    .first<{ cnt: number }>();
-
-  const docs = await db
-    .prepare('SELECT COUNT(*) as cnt FROM documents WHERE org_id = ?')
-    .bind(orgId)
-    .first<{ cnt: number }>();
-
-  const pending = await db
-    .prepare('SELECT COUNT(*) as cnt FROM join_requests WHERE org_id = ? AND status = ?')
-    .bind(orgId, 'pending')
-    .first<{ cnt: number }>();
+  const [members, newMembers, messages, docs, pending] = await Promise.all([
+    db
+      .prepare('SELECT COUNT(*) as cnt FROM org_members WHERE org_id = ?')
+      .bind(orgId)
+      .first<{ cnt: number }>(),
+    db
+      .prepare(
+        `SELECT COUNT(*) as cnt FROM org_members
+         WHERE org_id = ? AND joined_at >= datetime('now', '-7 days')`
+      )
+      .bind(orgId)
+      .first<{ cnt: number }>(),
+    db
+      .prepare(
+        `SELECT COUNT(*) as cnt FROM messages m
+         JOIN conversations c ON m.conversation_id = c.id
+         WHERE c.org_id = ?`
+      )
+      .bind(orgId)
+      .first<{ cnt: number }>(),
+    db
+      .prepare('SELECT COUNT(*) as cnt FROM documents WHERE org_id = ?')
+      .bind(orgId)
+      .first<{ cnt: number }>(),
+    db
+      .prepare('SELECT COUNT(*) as cnt FROM join_requests WHERE org_id = ? AND status = ?')
+      .bind(orgId, 'pending')
+      .first<{ cnt: number }>(),
+  ]);
 
   return {
     total_members: members?.cnt ?? 0,
