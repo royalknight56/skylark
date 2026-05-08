@@ -10,13 +10,16 @@
 		"deploy": "opennextjs-cloudflare build && wrangler deploy",
 		"upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
 		"preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+		"super-admin:hash": "node scripts/super-admin-hash.mjs",
 		"cf-typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts",
 		"db:init": "wrangler d1 execute skylarkd1 --local --file src/lib/db/schema.sql",
 		"db:migrate:mail": "wrangler d1 execute skylarkd1 --local --file migrations/0001_auth_mail_system.sql",
 		"db:migrate:perf": "wrangler d1 execute skylarkd1 --local --file migrations/0002_performance_indexes.sql",
+		"db:migrate:feedback": "wrangler d1 execute skylarkd1 --local --file migrations/0003_product_feedback.sql",
 		"db:init:remote": "wrangler d1 execute skylarkd1 --remote --file src/lib/db/schema.sql",
 		"db:migrate:mail:remote": "wrangler d1 execute skylarkd1 --remote --file migrations/0001_auth_mail_system.sql",
-		"db:migrate:perf:remote": "wrangler d1 execute skylarkd1 --remote --file migrations/0002_performance_indexes.sql"
+		"db:migrate:perf:remote": "wrangler d1 execute skylarkd1 --remote --file migrations/0002_performance_indexes.sql",
+		"db:migrate:feedback:remote": "wrangler d1 execute skylarkd1 --remote --file migrations/0003_product_feedback.sql"
 	},
 	"dependencies": {
 		"@opennextjs/cloudflare": "^1.19.1",

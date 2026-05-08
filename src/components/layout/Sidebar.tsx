@@ -15,6 +15,7 @@ import {
   Users,
   FileText,
   Settings,
+  HelpCircle,
   LayoutGrid,
   ChevronDown,
   Plus,
@@ -26,6 +27,7 @@ import {
 import { useOrg } from "@/lib/org-context";
 import { useAuth } from "@/lib/auth-context";
 import { useNotification } from "@/lib/notification-context";
+import FeedbackModal from "@/components/feedback/FeedbackModal";
 import ProfilePopup from "@/components/profile/ProfilePopup";
 
 /** 导航项配置 */
@@ -46,6 +48,7 @@ export default function Sidebar() {
   const { totalUnread } = useNotification();
   const [showOrgMenu, setShowOrgMenu] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   /** 关闭菜单的外部点击 */
@@ -219,6 +222,20 @@ export default function Sidebar() {
 
       {/* 底部设置 — 移动端仅显示设置和头像 */}
       <div className="flex flex-row items-center gap-2 md:flex-col md:items-center md:gap-2">
+        <button
+          onClick={() => setShowFeedback(true)}
+          className="w-10 h-10 rounded-lg hidden md:flex items-center justify-center transition-colors relative group text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active"
+          title="问题反馈"
+        >
+          <HelpCircle size={20} />
+          <span
+            className="absolute left-14 px-2 py-1 bg-gray-800 text-white text-xs rounded
+              opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50"
+          >
+            问题反馈
+          </span>
+        </button>
+
         {/* 管理后台入口 - 仅 owner 且桌面端可见 */}
         {currentOrg && user && currentOrg.owner_id === user.id && (
           <Link
@@ -276,8 +293,17 @@ export default function Sidebar() {
         </button>
       </div>
 
+      <button
+        onClick={() => setShowFeedback(true)}
+        className="fixed left-3 bottom-[4.5rem] z-40 w-10 h-10 rounded-full md:hidden flex items-center justify-center bg-primary text-white shadow-lg"
+        title="问题反馈"
+      >
+        <HelpCircle size={20} />
+      </button>
+
       {/* 个人名片弹窗 */}
       {showProfile && <ProfilePopup onClose={() => setShowProfile(false)} />}
+      {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}
     </aside>
   );
 }
