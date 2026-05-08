@@ -16,10 +16,12 @@
 		"db:migrate:mail": "wrangler d1 execute skylarkd1 --local --file migrations/0001_auth_mail_system.sql",
 		"db:migrate:perf": "wrangler d1 execute skylarkd1 --local --file migrations/0002_performance_indexes.sql",
 		"db:migrate:feedback": "wrangler d1 execute skylarkd1 --local --file migrations/0003_product_feedback.sql",
+		"db:migrate:email-verification": "wrangler d1 execute skylarkd1 --local --file migrations/0004_email_verification.sql",
 		"db:init:remote": "wrangler d1 execute skylarkd1 --remote --file src/lib/db/schema.sql",
 		"db:migrate:mail:remote": "wrangler d1 execute skylarkd1 --remote --file migrations/0001_auth_mail_system.sql",
 		"db:migrate:perf:remote": "wrangler d1 execute skylarkd1 --remote --file migrations/0002_performance_indexes.sql",
-		"db:migrate:feedback:remote": "wrangler d1 execute skylarkd1 --remote --file migrations/0003_product_feedback.sql"
+		"db:migrate:feedback:remote": "wrangler d1 execute skylarkd1 --remote --file migrations/0003_product_feedback.sql",
+		"db:migrate:email-verification:remote": "wrangler d1 execute skylarkd1 --remote --file migrations/0004_email_verification.sql"
 	},
 	"dependencies": {
 		"@opennextjs/cloudflare": "^1.19.1",

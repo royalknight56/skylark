@@ -25,7 +25,7 @@ interface AuthContextValue {
   loading: boolean;
   /** 登录 */
   login: (email: string, password: string) => Promise<AuthResult>;
-  /** 注册并登录 */
+  /** 注册 */
   register: (name: string, email: string, password: string) => Promise<AuthResult>;
   /** 登出 */
   logout: () => Promise<void>;
@@ -36,12 +36,15 @@ interface AuthContextValue {
 interface AuthResult {
   success: boolean;
   error?: string;
+  pendingVerification?: boolean;
+  needsVerification?: boolean;
+  email?: string;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 /** 不需要登录的路径前缀 */
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/verify-email"];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -92,12 +95,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const json = (await res.json()) as { success: boolean; data?: User; error?: string };
+      const json = (await res.json()) as {
+        success: boolean;
+        data?: User;
+        error?: string;
+        pending_verification?: boolean;
+        needs_verification?: boolean;
+        email?: string;
+      };
       if (json.success && json.data) {
         setUser(json.data);
         return { success: true };
       }
-      return { success: false, error: json.error || "认证失败，请重试" };
+      if (json.success && json.pending_verification) {
+        setUser(null);
+        return { success: true, pendingVerification: true, email: json.email };
+      }
+      return {
+        success: false,
+        error: json.error || "认证失败，请重试",
+        needsVerification: json.needs_verification,
+        email: json.email,
+      };
     } catch {
       return { success: false, error: "网络异常，请稍后重试" };
     }

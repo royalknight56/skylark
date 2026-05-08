@@ -7,6 +7,8 @@
 - 在 Cloudflare 控制台为企业域名启用 Email Routing / Email Service。
 - 将需要接收的地址路由到 `skylark` Worker。
 - 确认 `wrangler.jsonc` 已配置 `send_email` binding：`EMAIL`。
+- 注册验证邮件复用 `EMAIL` binding，`AUTH_EMAIL_FROM` 已配置为 `no-reply@rustpoint.com`，需要确保该地址在 Cloudflare 可发送。
+- 注册验证邮件展示名固定为 `Skylark`。
 
 ## 本地收信模拟
 

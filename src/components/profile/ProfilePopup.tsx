@@ -484,7 +484,7 @@ export default function ProfilePopup({ onClose }: ProfilePopupProps) {
 
         {/* 分享名片视图 */}
         {tab === "share" && (
-          <div className="px-6 pb-5 -mt-4">
+          <div className="px-4 sm:px-6 pt-5 pb-5">
             <h4 className="text-base font-semibold text-text-primary mb-4">分享个人名片</h4>
 
             {/* 名片预览卡 */}
@@ -508,10 +508,10 @@ export default function ProfilePopup({ onClose }: ProfilePopupProps) {
 
             {/* 二维码区域 */}
             <div className="flex flex-col items-center py-4 bg-list-hover rounded-xl mb-4">
-              <div className="w-40 h-40 bg-white rounded-xl flex items-center justify-center border border-panel-border mb-3">
+              <div className="w-32 h-32 sm:w-40 sm:h-40 bg-white rounded-xl flex items-center justify-center border border-panel-border mb-3 shrink-0">
                 {/* 简化的文字型二维码占位 */}
                 <div className="text-center">
-                  <QrCode size={80} className="text-text-placeholder mx-auto mb-1" />
+                  <QrCode className="w-16 h-16 sm:w-20 sm:h-20 text-text-placeholder mx-auto mb-1" />
                   <p className="text-[10px] text-text-placeholder">扫码查看名片</p>
                 </div>
               </div>
@@ -521,14 +521,14 @@ export default function ProfilePopup({ onClose }: ProfilePopupProps) {
             </div>
 
             {/* 分享链接 */}
-            <div className="flex items-center gap-2 mb-4">
-              <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-bg-page border border-panel-border rounded-lg">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+              <div className="w-full min-w-0 flex items-center gap-2 px-3 py-2 bg-bg-page border border-panel-border rounded-lg">
                 <Link2 size={14} className="text-text-placeholder shrink-0" />
-                <span className="text-sm text-text-secondary truncate">{shareUrl}</span>
+                <span className="text-sm text-text-secondary truncate min-w-0">{shareUrl}</span>
               </div>
               <button
                 onClick={handleCopyLink}
-                className={`shrink-0 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1
+                className={`w-full sm:w-auto shrink-0 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1
                   ${copied
                     ? "bg-green-50 text-green-600 border border-green-200"
                     : "bg-primary text-white hover:bg-primary/90"

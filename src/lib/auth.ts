@@ -23,6 +23,7 @@ const USER_SELECT = `
 
 interface UserWithPassword extends User {
   password_hash: string | null;
+  email_verified_at: string | null;
 }
 
 /**
@@ -77,7 +78,6 @@ export function setAuthCookie(response: NextResponse, userId: string): void {
 
 /** 根据邮箱获取完整认证用户 */
 export async function getUserByEmail(db: D1Database, email: string): Promise<UserWithPassword | null> {
-  await ensureAuthSchema(db);
   return db
     .prepare('SELECT * FROM users WHERE email = ?')
     .bind(normalizeEmail(email))
@@ -110,13 +110,12 @@ export async function createPasswordUser(
   user: Pick<User, 'id' | 'email' | 'name' | 'avatar_url'>,
   passwordHash: string
 ): Promise<User> {
-  await ensureAuthSchema(db);
   await db
     .prepare(`
       INSERT INTO users (id, email, password_hash, name, avatar_url, status)
       VALUES (?, ?, ?, ?, ?, ?)
     `)
-    .bind(user.id, normalizeEmail(user.email), passwordHash, user.name, user.avatar_url, 'online')
+    .bind(user.id, normalizeEmail(user.email), passwordHash, user.name, user.avatar_url, 'offline')
     .run();
 
   const createdUser = await getPublicUserById(db, user.id);
@@ -126,13 +125,26 @@ export async function createPasswordUser(
   return createdUser;
 }
 
-/** 确保认证相关字段存在，避免旧本地 D1 未执行迁移时注册失败 */
-async function ensureAuthSchema(db: D1Database): Promise<void> {
-  const columns = await db.prepare('PRAGMA table_info(users)').all<{ name: string }>();
-  const hasPasswordHash = columns.results.some((column) => column.name === 'password_hash');
-  if (!hasPasswordHash) {
-    await db.prepare('ALTER TABLE users ADD COLUMN password_hash TEXT').run();
+/** 更新未验证账号资料，用于用户重新提交注册信息 */
+export async function updateUnverifiedPasswordUser(
+  db: D1Database,
+  userId: string,
+  fields: { name: string; passwordHash: string }
+): Promise<User> {
+  await db
+    .prepare(`
+      UPDATE users
+      SET name = ?, password_hash = ?, status = 'offline'
+      WHERE id = ? AND email_verified_at IS NULL
+    `)
+    .bind(fields.name, fields.passwordHash, userId)
+    .run();
+
+  const updatedUser = await getPublicUserById(db, userId);
+  if (!updatedUser) {
+    throw new Error('用户更新失败');
   }
+  return updatedUser;
 }
 
 /** 生成密码哈希 */
@@ -271,4 +283,3 @@ export async function requireAdmin(
   }
   return null;
 }
-

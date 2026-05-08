@@ -1,5 +1,5 @@
 /**
- * 注册 API - 创建密码账号并设置登录 Cookie
+ * 注册 API - 创建密码账号并发送邮箱验证邮件
  * @author skylark
  */
 
@@ -12,8 +12,9 @@ import {
   isValidEmail,
   isValidPassword,
   normalizeEmail,
-  setAuthCookie,
+  updateUnverifiedPasswordUser,
 } from "@/lib/auth";
+import { sendEmailVerification } from "@/lib/email-verification";
 import { NextRequest, NextResponse } from "next/server";
 
 interface RegisterRequestBody {
@@ -46,7 +47,19 @@ export async function POST(request: NextRequest) {
     const { env } = await getCloudflareContext();
     const existing = await getUserByEmail(env.DB, email);
     if (existing) {
-      return NextResponse.json({ success: false, error: "该邮箱已注册，请直接登录" }, { status: 409 });
+      if (existing.email_verified_at) {
+        return NextResponse.json({ success: false, error: "该邮箱已注册，请直接登录" }, { status: 409 });
+      }
+
+      const user = await updateUnverifiedPasswordUser(env.DB, existing.id, {
+        name,
+        passwordHash: await hashPassword(password),
+      });
+      await sendEmailVerification(env, user, request.nextUrl.origin);
+      return NextResponse.json(
+        { success: true, pending_verification: true, email: user.email },
+        { status: 200 }
+      );
     }
 
     const user = await createPasswordUser(env.DB, {
@@ -56,9 +69,11 @@ export async function POST(request: NextRequest) {
       avatar_url: null,
     }, await hashPassword(password));
 
-    const res = NextResponse.json({ success: true, data: user }, { status: 201 });
-    setAuthCookie(res, user.id);
-    return res;
+    await sendEmailVerification(env, user, request.nextUrl.origin);
+    return NextResponse.json(
+      { success: true, pending_verification: true, email: user.email },
+      { status: 201 }
+    );
   } catch (error) {
     console.error(error);
     return NextResponse.json({ success: false, error: String(error) }, { status: 500 });

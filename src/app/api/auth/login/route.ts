@@ -41,6 +41,17 @@ export async function POST(request: NextRequest) {
     if (!userWithPassword.password_hash) {
       return NextResponse.json({ success: false, error: "该账号尚未设置密码，请重新注册或联系管理员" }, { status: 401 });
     }
+    if (!userWithPassword.email_verified_at) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "请先完成邮箱验证",
+          needs_verification: true,
+          email: userWithPassword.email,
+        },
+        { status: 403 }
+      );
+    }
 
     const passwordMatched = await verifyPassword(password, userWithPassword.password_hash);
     if (!passwordMatched) {

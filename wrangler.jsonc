@@ -36,6 +36,9 @@
 	"observability": {
 		"enabled": true
 	},
+	"vars": {
+		"AUTH_EMAIL_FROM": "no-reply@rustpoint.com"
+	},
 	"upload_source_maps": true,
 	// D1 数据库 - 存储用户、会话、消息等关系数据
 	"d1_databases": [

@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, UserPlus, Mail, User as UserIcon, Lock, LogIn } from "lucide-react";
+import { Loader2, UserPlus, Mail, User as UserIcon, Lock, LogIn, MailCheck, RefreshCcw } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 type AuthMode = "login" | "register";
@@ -22,7 +22,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState("");
+  const [verificationEmail, setVerificationEmail] = useState("");
+  const [resendMessage, setResendMessage] = useState("");
 
   /** 已登录则跳转 */
   useEffect(() => {
@@ -63,11 +66,54 @@ export default function LoginPage() {
       ? await register(name.trim(), email.trim(), password)
       : await login(email.trim(), password);
     if (result.success) {
-      router.push(isRegister ? "/org" : "/messages");
+      if (isRegister && result.pendingVerification) {
+        setVerificationEmail(result.email || email.trim());
+        setPassword("");
+        setConfirmPassword("");
+      } else {
+        router.push(isRegister ? "/org" : "/messages");
+      }
+    } else if (result.needsVerification) {
+      setVerificationEmail(result.email || email.trim());
+      setPassword("");
     } else {
       setError(result.error || "认证失败，请重试");
     }
     setLoading(false);
+  };
+
+  const handleResend = async () => {
+    const targetEmail = verificationEmail || email.trim();
+    if (!targetEmail) return;
+    setResendMessage("");
+    setError("");
+    setResending(true);
+    try {
+      const res = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: targetEmail }),
+      });
+      const json = (await res.json()) as { success: boolean; error?: string };
+      if (json.success) {
+        setResendMessage("验证邮件已重新发送");
+      } else {
+        setError(json.error || "发送失败，请稍后重试");
+      }
+    } catch {
+      setError("网络异常，请稍后重试");
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const resetToLogin = () => {
+    setMode("login");
+    setVerificationEmail("");
+    setResendMessage("");
+    setError("");
+    setPassword("");
+    setConfirmPassword("");
   };
 
   return (
@@ -82,13 +128,48 @@ export default function LoginPage() {
           <p className="text-text-secondary mt-2 text-sm">企业协作办公平台</p>
         </div>
 
-        {/* 表单 */}
+        {verificationEmail ? (
+          <div className="bg-panel-bg rounded-xl shadow-sm p-6 space-y-4">
+            <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+              <MailCheck size={24} />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-text-primary">验证邮件已发送</h2>
+              <p className="text-sm text-text-secondary mt-2 leading-6">
+                我们已向 <span className="font-medium text-text-primary break-all">{verificationEmail}</span> 发送验证链接，请在 30 分钟内完成验证。
+              </p>
+            </div>
+
+            {resendMessage && <p className="text-sm text-success">{resendMessage}</p>}
+            {error && <p className="text-sm text-danger">{error}</p>}
+
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={resending}
+              className="w-full h-10 rounded-lg bg-primary text-white text-sm font-medium
+                hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+                flex items-center justify-center gap-2"
+            >
+              {resending ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
+              重新发送验证邮件
+            </button>
+            <button
+              type="button"
+              onClick={resetToLogin}
+              className="w-full h-10 rounded-lg border border-panel-border text-text-primary text-sm font-medium
+                hover:bg-bg-page transition-colors"
+            >
+              返回登录
+            </button>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="bg-panel-bg rounded-xl shadow-sm p-6 space-y-4">
           {/* 模式切换 */}
           <div className="grid grid-cols-2 gap-1 p-1 bg-bg-page rounded-lg">
             <button
               type="button"
-              onClick={() => { setMode("login"); setError(""); }}
+              onClick={() => { setMode("login"); setError(""); setResendMessage(""); }}
               className={`h-8 rounded-md text-sm font-medium transition-colors
                 ${!isRegister ? "bg-panel-bg text-primary shadow-sm" : "text-text-secondary hover:text-text-primary"}`}
             >
@@ -96,7 +177,7 @@ export default function LoginPage() {
             </button>
             <button
               type="button"
-              onClick={() => { setMode("register"); setError(""); }}
+              onClick={() => { setMode("register"); setError(""); setResendMessage(""); }}
               className={`h-8 rounded-md text-sm font-medium transition-colors
                 ${isRegister ? "bg-panel-bg text-primary shadow-sm" : "text-text-secondary hover:text-text-primary"}`}
             >
@@ -200,13 +281,14 @@ export default function LoginPage() {
             ) : (
               <LogIn size={16} />
             )}
-            {isRegister ? "注册并进入 Skylark" : "登录 Skylark"}
+            {isRegister ? "注册 Skylark" : "登录 Skylark"}
           </button>
 
           <p className="text-xs text-text-placeholder text-center">
-            {isRegister ? "注册后将自动登录并进入企业创建流程" : "还没有账号？切换到注册创建新账号"}
+            {isRegister ? "注册后需要先完成邮箱验证" : "还没有账号？切换到注册创建新账号"}
           </p>
         </form>
+        )}
       </div>
     </div>
   );

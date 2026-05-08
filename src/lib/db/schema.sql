@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
+  email_verified_at DATETIME,
   name TEXT NOT NULL,
   avatar_url TEXT,
   login_phone TEXT UNIQUE,
@@ -139,6 +140,21 @@ CREATE TABLE IF NOT EXISTS users (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (current_org_id) REFERENCES organizations(id)
 );
+
+-- 邮箱验证令牌表
+CREATE TABLE IF NOT EXISTS email_verifications (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  token_hash TEXT UNIQUE NOT NULL,
+  expires_at DATETIME NOT NULL,
+  used_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_verifications_user ON email_verifications(user_id, used_at);
+CREATE INDEX IF NOT EXISTS idx_email_verifications_expires ON email_verifications(expires_at);
 
 -- ==================== 会话 ====================
 
