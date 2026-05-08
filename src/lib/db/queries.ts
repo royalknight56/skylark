@@ -228,7 +228,7 @@ export async function getOrgMembers(
     .prepare(
       `SELECT om.*, u.name, u.email, u.avatar_url, u.login_phone, u.status
        FROM org_members om JOIN users u ON om.user_id = u.id
-       WHERE om.org_id = ? AND (om.member_status IS NULL OR om.member_status != 'departed')
+       WHERE om.org_id = ? AND om.member_status != 'departed'
        ORDER BY
          CASE WHEN om.sort_order > 0 THEN 0 ELSE 1 END,
          om.sort_order DESC,
@@ -2013,7 +2013,7 @@ export async function getDepartments(
   const result = await db
     .prepare(
       `SELECT d.*,
-        (SELECT COUNT(*) FROM org_members WHERE org_id = d.org_id AND department = d.name AND (member_status IS NULL OR member_status != 'departed')) as member_count,
+        (SELECT COUNT(*) FROM org_members WHERE org_id = d.org_id AND department = d.name AND member_status != 'departed') as member_count,
         u.id as lid, u.name as lname, u.email as lemail, u.avatar_url as lavatar
        FROM departments d
        LEFT JOIN users u ON d.leader_id = u.id

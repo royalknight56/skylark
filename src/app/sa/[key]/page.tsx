@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   AlertCircle, Building2, CheckCircle2, Loader2, LockKeyhole,
-  LogOut, MessageSquareWarning, RefreshCw, Users,
+  ChevronLeft, ChevronRight, LogOut, MessageSquareWarning, RefreshCw, Users,
 } from "lucide-react";
 
 interface ApiResult<T> {
@@ -73,7 +73,13 @@ interface OverviewData {
   feedback_by_status: { status: string; count: number }[];
   feedback_by_type: { type: string; count: number }[];
   recent_users: UserItem[];
+  users_page: number;
+  users_page_size: number;
+  users_total: number;
   organization_list: OrganizationItem[];
+  organizations_page: number;
+  organizations_page_size: number;
+  organizations_total: number;
   recent_feedback: FeedbackItem[];
 }
 
@@ -127,6 +133,51 @@ function StatCard({
   );
 }
 
+function Pagination({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = Math.min(total, page * pageSize);
+
+  return (
+    <div className="h-11 px-4 flex items-center justify-between border-t border-panel-border bg-bg-page">
+      <span className="text-xs text-text-placeholder">
+        {start}-{end} / {total}
+      </span>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          className="w-8 h-8 rounded-md border border-panel-border bg-panel-bg flex items-center justify-center text-text-secondary hover:bg-list-hover disabled:opacity-40"
+          title="上一页"
+        >
+          <ChevronLeft size={15} />
+        </button>
+        <span className="text-xs text-text-secondary">
+          {page} / {totalPages}
+        </span>
+        <button
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+          className="w-8 h-8 rounded-md border border-panel-border bg-panel-bg flex items-center justify-center text-text-secondary hover:bg-list-hover disabled:opacity-40"
+          title="下一页"
+        >
+          <ChevronRight size={15} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function SuperAdminPage() {
   const params = useParams<{ key: string }>();
   const pathKey = Array.isArray(params.key) ? params.key[0] : params.key;
@@ -136,12 +187,20 @@ export default function SuperAdminPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [error, setError] = useState("");
+  const [userPage, setUserPage] = useState(1);
+  const [orgPage, setOrgPage] = useState(1);
 
   const loadOverview = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/super-admin/overview");
+      const params = new URLSearchParams({
+        user_page: String(userPage),
+        user_page_size: "20",
+        org_page: String(orgPage),
+        org_page_size: "20",
+      });
+      const res = await fetch(`/api/super-admin/overview?${params.toString()}`);
       const json = (await res.json()) as ApiResult<OverviewData>;
       if (!json.success || !json.data) throw new Error(json.error || "加载失败");
       setOverview(json.data);
@@ -153,7 +212,7 @@ export default function SuperAdminPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [orgPage, userPage]);
 
   useEffect(() => {
     let active = true;
@@ -210,7 +269,7 @@ export default function SuperAdminPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-bg-page flex items-center justify-center">
+      <div className="h-screen h-dvh bg-bg-page flex items-center justify-center">
         <Loader2 size={32} className="text-primary animate-spin" />
       </div>
     );
@@ -218,7 +277,7 @@ export default function SuperAdminPage() {
 
   if (!authenticated) {
     return (
-      <div className="min-h-screen bg-bg-page flex items-center justify-center px-4">
+      <div className="h-screen h-dvh bg-bg-page flex items-center justify-center px-4 overflow-y-auto">
         <div className="w-full max-w-sm bg-panel-bg border border-panel-border rounded-xl shadow-sm p-6">
           <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-5">
             <LockKeyhole size={24} />
@@ -254,7 +313,7 @@ export default function SuperAdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-page overflow-y-auto">
+    <div className="h-screen h-dvh bg-bg-page overflow-y-auto">
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-6">
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
@@ -319,7 +378,7 @@ export default function SuperAdminPage() {
               <div className="bg-panel-bg border border-panel-border rounded-lg overflow-hidden">
                 <div className="h-12 px-4 flex items-center justify-between border-b border-panel-border">
                   <h2 className="text-sm font-semibold text-text-primary">用户信息</h2>
-                  <span className="text-xs text-text-placeholder">最近 100 个注册用户</span>
+                  <span className="text-xs text-text-placeholder">分页查看</span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[42rem] text-sm">
@@ -355,12 +414,18 @@ export default function SuperAdminPage() {
                     </tbody>
                   </table>
                 </div>
+                <Pagination
+                  page={overview.users_page}
+                  pageSize={overview.users_page_size}
+                  total={overview.users_total}
+                  onPageChange={setUserPage}
+                />
               </div>
 
               <div className="bg-panel-bg border border-panel-border rounded-lg overflow-hidden">
                 <div className="h-12 px-4 flex items-center justify-between border-b border-panel-border">
                   <h2 className="text-sm font-semibold text-text-primary">企业数量信息</h2>
-                  <span className="text-xs text-text-placeholder">最近 100 个企业</span>
+                  <span className="text-xs text-text-placeholder">分页查看</span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[42rem] text-sm">
@@ -398,6 +463,12 @@ export default function SuperAdminPage() {
                     </tbody>
                   </table>
                 </div>
+                <Pagination
+                  page={overview.organizations_page}
+                  pageSize={overview.organizations_page_size}
+                  total={overview.organizations_total}
+                  onPageChange={setOrgPage}
+                />
               </div>
             </section>
 

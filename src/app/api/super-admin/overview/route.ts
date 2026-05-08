@@ -56,6 +56,17 @@ interface OrganizationRow {
   created_at: string;
 }
 
+function parsePageParam(request: NextRequest, key: string): number {
+  const value = Number.parseInt(request.nextUrl.searchParams.get(key) || "1", 10);
+  return Number.isFinite(value) ? Math.max(1, value) : 1;
+}
+
+function parsePageSizeParam(request: NextRequest, key: string): number {
+  const value = Number.parseInt(request.nextUrl.searchParams.get(key) || "20", 10);
+  if (!Number.isFinite(value)) return 20;
+  return Math.min(50, Math.max(5, value));
+}
+
 /** GET /api/super-admin/overview */
 export async function GET(request: NextRequest) {
   try {
@@ -68,6 +79,13 @@ export async function GET(request: NextRequest) {
     if (!authenticated) {
       return NextResponse.json({ success: false, error: "未授权" }, { status: 401 });
     }
+
+    const userPage = parsePageParam(request, "user_page");
+    const userPageSize = parsePageSizeParam(request, "user_page_size");
+    const userOffset = (userPage - 1) * userPageSize;
+    const orgPage = parsePageParam(request, "org_page");
+    const orgPageSize = parsePageSizeParam(request, "org_page_size");
+    const orgOffset = (orgPage - 1) * orgPageSize;
 
     const [
       userCount,
@@ -95,29 +113,29 @@ export async function GET(request: NextRequest) {
         FROM users u
         LEFT JOIN organizations o ON o.id = u.current_org_id
         LEFT JOIN org_members om ON om.user_id = u.id
-          AND (om.member_status IS NULL OR om.member_status != 'departed')
+          AND om.member_status != 'departed'
         GROUP BY
           u.id, u.email, u.name, u.avatar_url, u.login_phone, u.status,
           u.status_text, u.current_org_id, u.created_at, o.name
         ORDER BY u.created_at DESC
-        LIMIT 100
-      `).all<UserRow>(),
+        LIMIT ? OFFSET ?
+      `).bind(userPageSize, userOffset).all<UserRow>(),
       env.DB.prepare(`
         SELECT
           o.id, o.name, o.description, o.industry, o.owner_id, o.created_at,
           u.name AS owner_name, u.email AS owner_email,
           COUNT(om.user_id) AS member_count,
-          SUM(CASE WHEN om.member_status IS NULL OR om.member_status = 'active' THEN 1 ELSE 0 END) AS active_member_count
+          SUM(CASE WHEN om.member_status = 'active' THEN 1 ELSE 0 END) AS active_member_count
         FROM organizations o
         LEFT JOIN users u ON u.id = o.owner_id
         LEFT JOIN org_members om ON om.org_id = o.id
-          AND (om.member_status IS NULL OR om.member_status != 'departed')
+          AND om.member_status != 'departed'
         GROUP BY
           o.id, o.name, o.description, o.industry, o.owner_id, o.created_at,
           u.name, u.email
         ORDER BY o.created_at DESC
-        LIMIT 100
-      `).all<OrganizationRow>(),
+        LIMIT ? OFFSET ?
+      `).bind(orgPageSize, orgOffset).all<OrganizationRow>(),
       env.DB.prepare(`
         SELECT
           f.id, f.org_id, f.user_id, f.type, f.title, f.content, f.contact,
@@ -141,7 +159,13 @@ export async function GET(request: NextRequest) {
         feedback_by_status: feedbackByStatus.results || [],
         feedback_by_type: feedbackByType.results || [],
         recent_users: recentUsers.results || [],
+        users_page: userPage,
+        users_page_size: userPageSize,
+        users_total: userCount?.count || 0,
         organization_list: organizations.results || [],
+        organizations_page: orgPage,
+        organizations_page_size: orgPageSize,
+        organizations_total: orgCount?.count || 0,
         recent_feedback: recentFeedback.results || [],
       },
     });

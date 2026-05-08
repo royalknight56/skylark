@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
           `SELECT om.title, om.department, o.name AS org_name
            FROM org_members om
            JOIN organizations o ON o.id = om.org_id
-           WHERE om.user_id = ? AND (om.member_status IS NULL OR om.member_status = 'active')
+           WHERE om.user_id = ? AND om.member_status = 'active'
            LIMIT 1`
         )
         .bind(userId)
