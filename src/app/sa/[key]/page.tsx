@@ -38,6 +38,33 @@ interface FeedbackItem {
   org_name: string | null;
 }
 
+interface UserItem {
+  id: string;
+  email: string;
+  name: string;
+  avatar_url: string | null;
+  login_phone: string | null;
+  status: string;
+  status_text: string | null;
+  current_org_id: string | null;
+  created_at: string;
+  current_org_name: string | null;
+  joined_org_count: number;
+}
+
+interface OrganizationItem {
+  id: string;
+  name: string;
+  description: string | null;
+  industry: string | null;
+  owner_id: string;
+  owner_name: string | null;
+  owner_email: string | null;
+  member_count: number;
+  active_member_count: number;
+  created_at: string;
+}
+
 interface OverviewData {
   users: number;
   organizations: number;
@@ -45,6 +72,8 @@ interface OverviewData {
   open_feedback: number;
   feedback_by_status: { status: string; count: number }[];
   feedback_by_type: { type: string; count: number }[];
+  recent_users: UserItem[];
+  organization_list: OrganizationItem[];
   recent_feedback: FeedbackItem[];
 }
 
@@ -60,6 +89,13 @@ const statusLabel: Record<string, string> = {
   processing: "处理中",
   resolved: "已解决",
   closed: "已关闭",
+};
+
+const userStatusLabel: Record<string, string> = {
+  online: "在线",
+  busy: "忙碌",
+  away: "离开",
+  offline: "离线",
 };
 
 function formatTime(value: string): string {
@@ -275,6 +311,92 @@ export default function SuperAdminPage() {
                     </div>
                   ))}
                   {overview.feedback_by_type.length === 0 && <p className="text-sm text-text-placeholder">暂无反馈</p>}
+                </div>
+              </div>
+            </section>
+
+            <section className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
+              <div className="bg-panel-bg border border-panel-border rounded-lg overflow-hidden">
+                <div className="h-12 px-4 flex items-center justify-between border-b border-panel-border">
+                  <h2 className="text-sm font-semibold text-text-primary">用户信息</h2>
+                  <span className="text-xs text-text-placeholder">最近 100 个注册用户</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[42rem] text-sm">
+                    <thead className="bg-bg-page text-xs text-text-secondary">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-medium">用户</th>
+                        <th className="px-4 py-2 text-left font-medium">状态</th>
+                        <th className="px-4 py-2 text-left font-medium">当前企业</th>
+                        <th className="px-4 py-2 text-left font-medium">企业数</th>
+                        <th className="px-4 py-2 text-left font-medium">注册时间</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-panel-border">
+                      {overview.recent_users.map((item) => (
+                        <tr key={item.id} className="hover:bg-list-hover/60">
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-text-primary">{item.name}</p>
+                            <p className="text-xs text-text-placeholder">{item.email}</p>
+                            {item.login_phone && <p className="text-xs text-text-placeholder">{item.login_phone}</p>}
+                          </td>
+                          <td className="px-4 py-3 text-text-secondary">
+                            {userStatusLabel[item.status] || item.status}
+                            {item.status_text && <p className="text-xs text-text-placeholder mt-0.5">{item.status_text}</p>}
+                          </td>
+                          <td className="px-4 py-3 text-text-secondary">{item.current_org_name || "未选择"}</td>
+                          <td className="px-4 py-3 text-text-secondary">{item.joined_org_count}</td>
+                          <td className="px-4 py-3 text-text-placeholder">{formatTime(item.created_at)}</td>
+                        </tr>
+                      ))}
+                      {overview.recent_users.length === 0 && (
+                        <tr><td colSpan={5} className="px-4 py-10 text-center text-text-placeholder">暂无用户</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="bg-panel-bg border border-panel-border rounded-lg overflow-hidden">
+                <div className="h-12 px-4 flex items-center justify-between border-b border-panel-border">
+                  <h2 className="text-sm font-semibold text-text-primary">企业数量信息</h2>
+                  <span className="text-xs text-text-placeholder">最近 100 个企业</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[42rem] text-sm">
+                    <thead className="bg-bg-page text-xs text-text-secondary">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-medium">企业</th>
+                        <th className="px-4 py-2 text-left font-medium">成员</th>
+                        <th className="px-4 py-2 text-left font-medium">所有者</th>
+                        <th className="px-4 py-2 text-left font-medium">行业</th>
+                        <th className="px-4 py-2 text-left font-medium">创建时间</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-panel-border">
+                      {overview.organization_list.map((item) => (
+                        <tr key={item.id} className="hover:bg-list-hover/60">
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-text-primary">{item.name}</p>
+                            {item.description && <p className="text-xs text-text-placeholder line-clamp-1">{item.description}</p>}
+                          </td>
+                          <td className="px-4 py-3 text-text-secondary">
+                            <p>{item.member_count} 人</p>
+                            <p className="text-xs text-text-placeholder">活跃 {item.active_member_count} 人</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="text-text-secondary">{item.owner_name || item.owner_id}</p>
+                            {item.owner_email && <p className="text-xs text-text-placeholder">{item.owner_email}</p>}
+                          </td>
+                          <td className="px-4 py-3 text-text-secondary">{item.industry || "未填写"}</td>
+                          <td className="px-4 py-3 text-text-placeholder">{formatTime(item.created_at)}</td>
+                        </tr>
+                      ))}
+                      {overview.organization_list.length === 0 && (
+                        <tr><td colSpan={5} className="px-4 py-10 text-center text-text-placeholder">暂无企业</td></tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </section>
