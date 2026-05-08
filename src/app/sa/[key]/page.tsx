@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   AlertCircle, Building2, CheckCircle2, Loader2, LockKeyhole,
-  ChevronLeft, ChevronRight, LogOut, MessageSquareWarning, RefreshCw, Users,
+  ChevronLeft, ChevronRight, LogOut, MessageSquareWarning, RefreshCw, Users, X,
 } from "lucide-react";
 
 interface ApiResult<T> {
@@ -83,6 +83,64 @@ interface OverviewData {
   recent_feedback: FeedbackItem[];
 }
 
+interface UserDetailData {
+  kind: "user";
+  user: UserItem & {
+    status_emoji: string | null;
+    signature: string | null;
+    current_org_name: string | null;
+  };
+  orgs: Array<{
+    org_id: string;
+    org_name: string;
+    role: string;
+    department: string | null;
+    title: string | null;
+    employee_id: string | null;
+    phone: string | null;
+    work_city: string | null;
+    gender: string | null;
+    employee_type: string | null;
+    member_status: string;
+    joined_at: string;
+  }>;
+  feedback: Array<FeedbackItem & { org_name: string | null }>;
+}
+
+interface OrganizationDetailData {
+  kind: "organization";
+  organization: OrganizationItem & {
+    logo_url: string | null;
+    contact_name: string | null;
+    contact_email: string | null;
+    contact_phone: string | null;
+    website: string | null;
+    address: string | null;
+    invite_code: string | null;
+    require_approval: number | boolean;
+  };
+  members: Array<{
+    user_id: string;
+    name: string;
+    email: string;
+    login_phone: string | null;
+    user_status: string;
+    role: string;
+    department: string | null;
+    title: string | null;
+    employee_id: string | null;
+    phone: string | null;
+    work_city: string | null;
+    gender: string | null;
+    employee_type: string | null;
+    member_status: string;
+    joined_at: string;
+  }>;
+  feedback: Array<FeedbackItem & { user_name: string | null; user_email: string | null }>;
+}
+
+type DetailData = UserDetailData | OrganizationDetailData;
+
 const typeLabel: Record<string, string> = {
   bug: "产品问题",
   suggestion: "功能建议",
@@ -129,6 +187,15 @@ function StatCard({
         <Icon size={18} className="text-primary" />
       </div>
       <p className="mt-3 text-3xl font-bold text-text-primary">{value}</p>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs text-text-placeholder mb-1">{label}</p>
+      <div className="text-sm text-text-primary break-words">{value || "未填写"}</div>
     </div>
   );
 }
@@ -189,6 +256,9 @@ export default function SuperAdminPage() {
   const [error, setError] = useState("");
   const [userPage, setUserPage] = useState(1);
   const [orgPage, setOrgPage] = useState(1);
+  const [detail, setDetail] = useState<DetailData | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
 
   const loadOverview = useCallback(async () => {
     setLoading(true);
@@ -265,6 +335,23 @@ export default function SuperAdminPage() {
     await fetch("/api/super-admin/session", { method: "DELETE" });
     setAuthenticated(false);
     setOverview(null);
+  };
+
+  const openDetail = async (type: "user" | "organization", id: string) => {
+    setDetail(null);
+    setDetailError("");
+    setDetailLoading(true);
+    try {
+      const params = new URLSearchParams({ type, id });
+      const res = await fetch(`/api/super-admin/details?${params.toString()}`);
+      const json = (await res.json()) as ApiResult<DetailData>;
+      if (!json.success || !json.data) throw new Error(json.error || "加载详情失败");
+      setDetail(json.data);
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
   if (loading) {
@@ -393,7 +480,11 @@ export default function SuperAdminPage() {
                     </thead>
                     <tbody className="divide-y divide-panel-border">
                       {overview.recent_users.map((item) => (
-                        <tr key={item.id} className="hover:bg-list-hover/60">
+                        <tr
+                          key={item.id}
+                          onClick={() => openDetail("user", item.id)}
+                          className="hover:bg-list-hover/60 cursor-pointer"
+                        >
                           <td className="px-4 py-3">
                             <p className="font-medium text-text-primary">{item.name}</p>
                             <p className="text-xs text-text-placeholder">{item.email}</p>
@@ -440,7 +531,11 @@ export default function SuperAdminPage() {
                     </thead>
                     <tbody className="divide-y divide-panel-border">
                       {overview.organization_list.map((item) => (
-                        <tr key={item.id} className="hover:bg-list-hover/60">
+                        <tr
+                          key={item.id}
+                          onClick={() => openDetail("organization", item.id)}
+                          className="hover:bg-list-hover/60 cursor-pointer"
+                        >
                           <td className="px-4 py-3">
                             <p className="font-medium text-text-primary">{item.name}</p>
                             {item.description && <p className="text-xs text-text-placeholder line-clamp-1">{item.description}</p>}
@@ -516,6 +611,183 @@ export default function SuperAdminPage() {
           </>
         )}
       </div>
+
+      {(detailLoading || detail || detailError) && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center px-4" onClick={() => { setDetail(null); setDetailError(""); }}>
+          <div
+            className="w-full max-w-4xl max-h-[calc(100dvh-2rem)] bg-panel-bg rounded-xl shadow-2xl border border-panel-border overflow-hidden flex flex-col"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="h-12 px-5 border-b border-panel-border flex items-center justify-between shrink-0">
+              <h2 className="text-base font-semibold text-text-primary">
+                {detail?.kind === "organization" ? "企业详细信息" : "个人详细信息"}
+                {detailLoading && "加载中"}
+              </h2>
+              <button
+                onClick={() => { setDetail(null); setDetailError(""); }}
+                className="w-8 h-8 rounded-md flex items-center justify-center text-text-placeholder hover:bg-list-hover"
+                title="关闭"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              {detailLoading && (
+                <div className="py-16 flex items-center justify-center">
+                  <Loader2 size={28} className="text-primary animate-spin" />
+                </div>
+              )}
+
+              {detailError && !detailLoading && (
+                <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-danger">{detailError}</div>
+              )}
+
+              {detail?.kind === "user" && (
+                <div className="space-y-6">
+                  <section>
+                    <h3 className="text-sm font-semibold text-text-primary mb-3">基础信息</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <InfoRow label="姓名" value={detail.user.name} />
+                      <InfoRow label="邮箱" value={detail.user.email} />
+                      <InfoRow label="手机号" value={detail.user.login_phone} />
+                      <InfoRow label="在线状态" value={userStatusLabel[detail.user.status] || detail.user.status} />
+                      <InfoRow label="当前企业" value={detail.user.current_org_name} />
+                      <InfoRow label="注册时间" value={formatTime(detail.user.created_at)} />
+                      <InfoRow label="状态文案" value={detail.user.status_text} />
+                      <InfoRow label="个性签名" value={detail.user.signature} />
+                      <InfoRow label="用户 ID" value={detail.user.id} />
+                    </div>
+                  </section>
+
+                  <section>
+                    <h3 className="text-sm font-semibold text-text-primary mb-3">加入企业</h3>
+                    <div className="overflow-x-auto border border-panel-border rounded-lg">
+                      <table className="w-full min-w-[42rem] text-sm">
+                        <thead className="bg-bg-page text-xs text-text-secondary">
+                          <tr>
+                            <th className="px-3 py-2 text-left">企业</th>
+                            <th className="px-3 py-2 text-left">角色</th>
+                            <th className="px-3 py-2 text-left">部门/职位</th>
+                            <th className="px-3 py-2 text-left">状态</th>
+                            <th className="px-3 py-2 text-left">加入时间</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-panel-border">
+                          {detail.orgs.map((org) => (
+                            <tr key={org.org_id}>
+                              <td className="px-3 py-2">{org.org_name}</td>
+                              <td className="px-3 py-2">{org.role}</td>
+                              <td className="px-3 py-2">{[org.department, org.title].filter(Boolean).join(" / ") || "未填写"}</td>
+                              <td className="px-3 py-2">{org.member_status}</td>
+                              <td className="px-3 py-2 text-text-placeholder">{formatTime(org.joined_at)}</td>
+                            </tr>
+                          ))}
+                          {detail.orgs.length === 0 && <tr><td colSpan={5} className="px-3 py-8 text-center text-text-placeholder">暂无企业</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  <section>
+                    <h3 className="text-sm font-semibold text-text-primary mb-3">提交反馈</h3>
+                    <div className="space-y-2">
+                      {detail.feedback.map((item) => (
+                        <div key={item.id} className="rounded-lg border border-panel-border p-3">
+                          <div className="flex items-center gap-2 text-xs text-text-placeholder mb-1">
+                            <span>{typeLabel[item.type] || item.type}</span>
+                            <span>{statusLabel[item.status] || item.status}</span>
+                            <span>{formatTime(item.created_at)}</span>
+                          </div>
+                          <p className="text-sm font-medium text-text-primary">{item.title}</p>
+                          <p className="text-sm text-text-secondary mt-1 whitespace-pre-wrap">{item.content}</p>
+                        </div>
+                      ))}
+                      {detail.feedback.length === 0 && <p className="text-sm text-text-placeholder">暂无反馈</p>}
+                    </div>
+                  </section>
+                </div>
+              )}
+
+              {detail?.kind === "organization" && (
+                <div className="space-y-6">
+                  <section>
+                    <h3 className="text-sm font-semibold text-text-primary mb-3">基础信息</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <InfoRow label="企业名称" value={detail.organization.name} />
+                      <InfoRow label="企业 ID" value={detail.organization.id} />
+                      <InfoRow label="行业" value={detail.organization.industry} />
+                      <InfoRow label="成员数" value={`${detail.organization.member_count} 人`} />
+                      <InfoRow label="活跃成员" value={`${detail.organization.active_member_count} 人`} />
+                      <InfoRow label="创建时间" value={formatTime(detail.organization.created_at)} />
+                      <InfoRow label="所有者" value={detail.organization.owner_name || detail.organization.owner_id} />
+                      <InfoRow label="所有者邮箱" value={detail.organization.owner_email} />
+                      <InfoRow label="邀请码" value={detail.organization.invite_code} />
+                      <InfoRow label="联系人" value={detail.organization.contact_name} />
+                      <InfoRow label="联系邮箱" value={detail.organization.contact_email} />
+                      <InfoRow label="联系电话" value={detail.organization.contact_phone} />
+                      <InfoRow label="网站" value={detail.organization.website} />
+                      <InfoRow label="地址" value={detail.organization.address} />
+                      <InfoRow label="简介" value={detail.organization.description} />
+                    </div>
+                  </section>
+
+                  <section>
+                    <h3 className="text-sm font-semibold text-text-primary mb-3">成员列表</h3>
+                    <div className="overflow-x-auto border border-panel-border rounded-lg">
+                      <table className="w-full min-w-[48rem] text-sm">
+                        <thead className="bg-bg-page text-xs text-text-secondary">
+                          <tr>
+                            <th className="px-3 py-2 text-left">成员</th>
+                            <th className="px-3 py-2 text-left">角色</th>
+                            <th className="px-3 py-2 text-left">部门/职位</th>
+                            <th className="px-3 py-2 text-left">成员状态</th>
+                            <th className="px-3 py-2 text-left">加入时间</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-panel-border">
+                          {detail.members.map((member) => (
+                            <tr key={member.user_id}>
+                              <td className="px-3 py-2">
+                                <p className="text-text-primary">{member.name}</p>
+                                <p className="text-xs text-text-placeholder">{member.email}</p>
+                              </td>
+                              <td className="px-3 py-2">{member.role}</td>
+                              <td className="px-3 py-2">{[member.department, member.title].filter(Boolean).join(" / ") || "未填写"}</td>
+                              <td className="px-3 py-2">{member.member_status}</td>
+                              <td className="px-3 py-2 text-text-placeholder">{formatTime(member.joined_at)}</td>
+                            </tr>
+                          ))}
+                          {detail.members.length === 0 && <tr><td colSpan={5} className="px-3 py-8 text-center text-text-placeholder">暂无成员</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  <section>
+                    <h3 className="text-sm font-semibold text-text-primary mb-3">企业反馈</h3>
+                    <div className="space-y-2">
+                      {detail.feedback.map((item) => (
+                        <div key={item.id} className="rounded-lg border border-panel-border p-3">
+                          <div className="flex items-center gap-2 text-xs text-text-placeholder mb-1">
+                            <span>{item.user_name || item.user_email || item.user_id}</span>
+                            <span>{typeLabel[item.type] || item.type}</span>
+                            <span>{statusLabel[item.status] || item.status}</span>
+                            <span>{formatTime(item.created_at)}</span>
+                          </div>
+                          <p className="text-sm font-medium text-text-primary">{item.title}</p>
+                          <p className="text-sm text-text-secondary mt-1 whitespace-pre-wrap">{item.content}</p>
+                        </div>
+                      ))}
+                      {detail.feedback.length === 0 && <p className="text-sm text-text-placeholder">暂无反馈</p>}
+                    </div>
+                  </section>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

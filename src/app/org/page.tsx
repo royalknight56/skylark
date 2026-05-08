@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Building2,
@@ -31,6 +31,7 @@ export default function OrgSelectPage() {
   const { logout } = useAuth();
   const [tab, setTab] = useState<Tab>("select");
   const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState("");
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
 
@@ -46,11 +47,19 @@ export default function OrgSelectPage() {
     fetch("/api/orgs")
       .then((res) => res.json() as Promise<{ success: boolean; data?: Organization[] }>)
       .then((json) => {
-        if (json.success && json.data) setOrgs(json.data);
+        if (json.success && json.data) {
+          setOrgs(json.data);
+          setSelectedOrgId(json.data[0]?.id || "");
+        }
       })
       .catch(() => {})
       .finally(() => setPageLoading(false));
   }, []);
+
+  const selectedOrg = useMemo(
+    () => orgs.find((org) => org.id === selectedOrgId) || null,
+    [orgs, selectedOrgId]
+  );
 
   /** 选择企业进入 */
   const handleSelectOrg = async (org: Organization) => {
@@ -105,6 +114,7 @@ export default function OrgSelectPage() {
       if (data.success && data.data) {
         setJoinSuccess(data.data);
         setOrgs((prev) => [...prev, data.data!]);
+        setSelectedOrgId(data.data.id);
       } else {
         setJoinError(data.error || "加入失败");
       }
@@ -164,12 +174,13 @@ export default function OrgSelectPage() {
           ))}
         </div>
 
-        <div className="bg-panel-bg rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-panel-bg rounded-xl shadow-sm overflow-hidden h-[32rem] max-h-[calc(100dvh-13rem)] min-h-[26rem] flex flex-col">
           {/* Tab: 选择已有企业 */}
           {tab === "select" && (
-            <div className="p-2">
+            <>
+            <div className="flex-1 overflow-y-auto p-2">
               {orgs.length === 0 ? (
-                <div className="py-12 text-center">
+                <div className="h-full min-h-0 flex flex-col items-center justify-center text-center px-4">
                   <Building2 size={40} className="text-text-placeholder mx-auto mb-3" />
                   <p className="text-text-secondary text-sm">还没有加入任何企业</p>
                   <p className="text-text-placeholder text-xs mt-1">
@@ -181,9 +192,10 @@ export default function OrgSelectPage() {
                   {orgs.map((org) => (
                     <button
                       key={org.id}
-                      onClick={() => handleSelectOrg(org)}
+                      onClick={() => setSelectedOrgId(org.id)}
                       disabled={loading}
-                      className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-list-hover transition-colors text-left group"
+                      className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left group
+                        ${selectedOrgId === org.id ? "bg-primary/10 ring-1 ring-primary/20" : "hover:bg-list-hover"}`}
                     >
                       <Avatar name={org.name} size="lg" />
                       <div className="flex-1 min-w-0">
@@ -198,20 +210,57 @@ export default function OrgSelectPage() {
                           <span>{org.member_count || 0} 名成员</span>
                         </div>
                       </div>
-                      <ArrowRight
-                        size={18}
-                        className="text-text-placeholder group-hover:text-primary transition-colors"
-                      />
+                      {selectedOrgId === org.id ? (
+                        <Check size={18} className="text-primary" />
+                      ) : (
+                        <ArrowRight
+                          size={18}
+                          className="text-text-placeholder group-hover:text-primary transition-colors"
+                        />
+                      )}
                     </button>
                   ))}
                 </div>
               )}
             </div>
+            <div className="shrink-0 border-t border-panel-border p-4 bg-panel-bg">
+              {orgs.length === 0 ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setTab("create")}
+                    className="h-10 rounded-lg bg-primary text-white text-sm font-medium flex items-center justify-center gap-2"
+                  >
+                    <Plus size={16} />
+                    创建企业
+                  </button>
+                  <button
+                    onClick={() => setTab("join")}
+                    className="h-10 rounded-lg border border-panel-border text-sm text-text-secondary font-medium flex items-center justify-center gap-2 hover:bg-list-hover"
+                  >
+                    <Ticket size={16} />
+                    加入企业
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => selectedOrg && handleSelectOrg(selectedOrg)}
+                  disabled={!selectedOrg || loading}
+                  className="w-full h-10 rounded-lg bg-primary text-white text-sm font-medium
+                    hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+                    flex items-center justify-center gap-2"
+                >
+                  {loading ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
+                  进入企业
+                </button>
+              )}
+            </div>
+            </>
           )}
 
           {/* Tab: 创建新企业 */}
           {tab === "create" && (
-            <div className="p-6 space-y-4">
+            <>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-text-primary mb-1.5">
                   企业名称 <span className="text-danger">*</span>
@@ -238,8 +287,13 @@ export default function OrgSelectPage() {
                   className="w-full px-3 py-2 rounded-lg border border-panel-border bg-panel-bg
                     text-sm text-text-primary placeholder:text-text-placeholder
                     focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-colors resize-none"
-                />
+                  />
               </div>
+              <p className="text-xs text-text-placeholder text-center">
+                创建后可通过邀请码邀请成员加入
+              </p>
+            </div>
+            <div className="shrink-0 border-t border-panel-border p-4 bg-panel-bg">
               <button
                 onClick={handleCreateOrg}
                 disabled={!orgName.trim() || loading}
@@ -250,17 +304,16 @@ export default function OrgSelectPage() {
                 {loading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
                 创建企业
               </button>
-              <p className="text-xs text-text-placeholder text-center">
-                创建后可通过邀请码邀请成员加入
-              </p>
             </div>
+            </>
           )}
 
           {/* Tab: 通过邀请码加入 */}
           {tab === "join" && (
-            <div className="p-6 space-y-4">
+            <>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {joinSuccess ? (
-                <div className="text-center py-4">
+                <div className="h-full min-h-0 flex flex-col items-center justify-center text-center py-4">
                   <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-3">
                     <Check size={24} className="text-success" />
                   </div>
@@ -270,13 +323,6 @@ export default function OrgSelectPage() {
                   <p className="text-xs text-text-secondary mt-1">
                     {joinSuccess.member_count} 名成员
                   </p>
-                  <button
-                    onClick={() => handleSelectOrg(joinSuccess)}
-                    className="mt-4 h-10 px-6 rounded-lg bg-primary text-white text-sm font-medium
-                      hover:bg-primary-hover transition-colors"
-                  >
-                    进入企业
-                  </button>
                 </div>
               ) : (
                 <>
@@ -301,22 +347,37 @@ export default function OrgSelectPage() {
                       {joinError}
                     </div>
                   )}
-                  <button
-                    onClick={handleJoinOrg}
-                    disabled={!inviteCode.trim() || loading}
-                    className="w-full h-10 rounded-lg bg-primary text-white text-sm font-medium
-                      hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-                      flex items-center justify-center gap-2"
-                  >
-                    {loading ? <Loader2 size={16} className="animate-spin" /> : <Ticket size={16} />}
-                    加入企业
-                  </button>
                   <p className="text-xs text-text-placeholder text-center">
                     向企业管理员获取邀请码
                   </p>
                 </>
               )}
             </div>
+            <div className="shrink-0 border-t border-panel-border p-4 bg-panel-bg">
+              {joinSuccess ? (
+                <button
+                  onClick={() => handleSelectOrg(joinSuccess)}
+                  disabled={loading}
+                  className="w-full h-10 rounded-lg bg-primary text-white text-sm font-medium
+                    hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
+                  进入企业
+                </button>
+              ) : (
+                <button
+                  onClick={handleJoinOrg}
+                  disabled={!inviteCode.trim() || loading}
+                  className="w-full h-10 rounded-lg bg-primary text-white text-sm font-medium
+                    hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+                    flex items-center justify-center gap-2"
+                >
+                  {loading ? <Loader2 size={16} className="animate-spin" /> : <Ticket size={16} />}
+                  加入企业
+                </button>
+              )}
+            </div>
+            </>
           )}
         </div>
       </div>
