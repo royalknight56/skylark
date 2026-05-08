@@ -178,10 +178,10 @@ export default function ProfilePopup({ onClose }: ProfilePopupProps) {
   if (!user) return null;
 
   return (
-    <div className="fixed inset-0 z-200 flex items-center justify-center bg-black/30">
+    <div className="fixed inset-0 z-200 flex items-start sm:items-center justify-center bg-black/30 overflow-y-auto px-4 py-4">
       <div
         ref={popupRef}
-        className="w-105 bg-panel-bg rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95"
+        className="w-full max-w-105 max-h-[calc(100dvh-2rem)] bg-panel-bg rounded-xl shadow-2xl overflow-y-auto animate-in fade-in zoom-in-95"
       >
         {/* 头部渐变背景 */}
         <div className="h-24 bg-linear-to-br from-primary via-blue-400 to-cyan-300 relative">
@@ -390,7 +390,7 @@ export default function ProfilePopup({ onClose }: ProfilePopupProps) {
 
         {/* 设置状态视图 */}
         {tab === "status" && (
-          <div className="px-6 pb-5 -mt-4">
+          <div className="px-6 pt-5 pb-5">
             <h4 className="text-base font-semibold text-text-primary mb-3">设置个人状态</h4>
 
             {/* 自定义状态输入 */}
