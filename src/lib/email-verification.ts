@@ -3,6 +3,7 @@
  */
 
 import type { User } from "./types";
+import { markReferralVerified } from "./referrals";
 
 const VERIFICATION_TOKEN_BYTES = 32;
 const VERIFICATION_TOKEN_TTL_MS = 30 * 60 * 1000;
@@ -120,6 +121,7 @@ export async function verifyEmailToken(
     db.prepare("UPDATE email_verifications SET used_at = CURRENT_TIMESTAMP WHERE id = ?").bind(record.id),
     db.prepare("UPDATE users SET email_verified_at = CURRENT_TIMESTAMP, status = 'online' WHERE id = ?").bind(record.user_id),
   ]);
+  await markReferralVerified(db, record.user_id);
 
   const user = await db
     .prepare(`

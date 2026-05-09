@@ -156,6 +156,21 @@ CREATE TABLE IF NOT EXISTS email_verifications (
 CREATE INDEX IF NOT EXISTS idx_email_verifications_user ON email_verifications(user_id, used_at);
 CREATE INDEX IF NOT EXISTS idx_email_verifications_expires ON email_verifications(expires_at);
 
+-- 分享裂变注册记录
+CREATE TABLE IF NOT EXISTS referral_registrations (
+  id TEXT PRIMARY KEY,
+  inviter_user_id TEXT NOT NULL,
+  referred_user_id TEXT NOT NULL UNIQUE,
+  status TEXT DEFAULT 'pending' CHECK(status IN ('pending','verified')),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  verified_at DATETIME,
+  FOREIGN KEY (inviter_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (referred_user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_referral_registrations_inviter_status
+  ON referral_registrations(inviter_user_id, status, verified_at DESC);
+
 -- ==================== 会话 ====================
 
 -- 会话表（绑定企业）

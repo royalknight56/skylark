@@ -8,10 +8,14 @@
 import { useEffect, useState } from "react";
 import {
   Briefcase,
+  Check,
+  Copy,
+  Gift,
   Loader2,
   LogOut,
   Mail,
   Save,
+  Share2,
   Smile,
   User as UserIcon,
 } from "lucide-react";
@@ -51,6 +55,9 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [shareOrigin, setShareOrigin] = useState("");
+  const [activityLinkCopied, setActivityLinkCopied] = useState(false);
+  const [activityTextCopied, setActivityTextCopied] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -60,6 +67,10 @@ export default function SettingsPage() {
     setStatusText(user.status_text || "");
     setStatusValue(user.status || "online");
   }, [user]);
+
+  useEffect(() => {
+    setShareOrigin(window.location.origin);
+  }, []);
 
   /** 保存个人信息 */
   const handleSave = async () => {
@@ -95,6 +106,28 @@ export default function SettingsPage() {
   };
 
   if (!user) return null;
+
+  const activityLink = shareOrigin
+    ? `${shareOrigin}/profile/${user.id}?ref=${encodeURIComponent(user.id)}&utm_source=share_activity`
+    : "";
+  const activityText = [
+    "我在用 Skylark 做团队协作，个人名片、消息、文档和日程都在一个工作台里。",
+    `这是我的名片入口：${activityLink}`,
+  ].join("\n");
+
+  const copyActivityLink = async () => {
+    if (!activityLink) return;
+    await navigator.clipboard.writeText(activityLink);
+    setActivityLinkCopied(true);
+    setTimeout(() => setActivityLinkCopied(false), 2000);
+  };
+
+  const copyActivityText = async () => {
+    if (!activityText) return;
+    await navigator.clipboard.writeText(activityText);
+    setActivityTextCopied(true);
+    setTimeout(() => setActivityTextCopied(false), 2000);
+  };
 
   return (
     <div className="flex-1 bg-bg-page overflow-y-auto">
@@ -279,6 +312,80 @@ export default function SettingsPage() {
               >
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                 {saved ? "已保存" : "保存"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 bg-panel-bg border border-panel-border rounded-xl overflow-hidden">
+          <div className="p-5 sm:p-6 bg-linear-to-br from-primary/10 via-bg-page to-cyan-50 border-b border-panel-border">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <Gift size={16} />
+                  分享裂变活动
+                </div>
+                <h2 className="mt-2 text-lg font-bold text-text-primary">邀请同事从你的名片进入 Skylark</h2>
+                <p className="mt-1 text-sm text-text-secondary leading-6">
+                  分享专属链接，好友打开后会先看到你的公开名片，再了解 Skylark。
+                </p>
+              </div>
+              <div className="shrink-0 rounded-xl bg-panel-bg border border-panel-border px-4 py-3 text-center">
+                <p className="text-2xl font-bold text-primary">1</p>
+                <p className="text-xs text-text-placeholder">专属入口</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5 sm:p-6 space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-panel-border bg-bg-page px-3 py-3">
+                <p className="text-xs text-text-placeholder">分享入口</p>
+                <p className="mt-1 text-sm font-medium text-text-primary">个人名片页</p>
+              </div>
+              <div className="rounded-lg border border-panel-border bg-bg-page px-3 py-3">
+                <p className="text-xs text-text-placeholder">推荐标识</p>
+                <p className="mt-1 text-sm font-medium text-text-primary truncate">{user.id}</p>
+              </div>
+              <div className="rounded-lg border border-panel-border bg-bg-page px-3 py-3">
+                <p className="text-xs text-text-placeholder">活动状态</p>
+                <p className="mt-1 text-sm font-medium text-success">可分享</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-text-placeholder mb-1.5">专属分享链接</label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="min-w-0 flex-1 flex items-center gap-2 px-3 py-2.5 bg-bg-page border border-panel-border rounded-lg">
+                  <Share2 size={14} className="text-text-placeholder shrink-0" />
+                  <span className="min-w-0 truncate text-sm text-text-secondary">{activityLink}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={copyActivityLink}
+                  className={`shrink-0 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5
+                    ${activityLinkCopied
+                      ? "bg-green-50 text-green-600 border border-green-200"
+                      : "bg-primary text-white hover:bg-primary/90"
+                    }`}
+                >
+                  {activityLinkCopied ? <Check size={14} /> : <Copy size={14} />}
+                  {activityLinkCopied ? "已复制" : "复制链接"}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg bg-list-hover px-4 py-3">
+              <p className="text-sm text-text-secondary leading-6">
+                一键复制邀请文案，适合发送到群聊、朋友圈或邮件。
+              </p>
+              <button
+                type="button"
+                onClick={copyActivityText}
+                className="shrink-0 px-4 py-2 rounded-lg border border-panel-border bg-panel-bg text-sm text-text-primary hover:bg-bg-page transition-colors flex items-center justify-center gap-1.5"
+              >
+                {activityTextCopied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+                {activityTextCopied ? "文案已复制" : "复制邀请文案"}
               </button>
             </div>
           </div>

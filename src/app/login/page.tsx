@@ -26,6 +26,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [verificationEmail, setVerificationEmail] = useState("");
   const [resendMessage, setResendMessage] = useState("");
+  const [referralUserId, setReferralUserId] = useState("");
 
   /** 已登录则跳转 */
   useEffect(() => {
@@ -33,6 +34,15 @@ export default function LoginPage() {
       router.replace("/messages");
     }
   }, [authLoading, user, router]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref") || window.localStorage.getItem("skylark_referral_user_id") || "";
+    if (!ref) return;
+    window.localStorage.setItem("skylark_referral_user_id", ref);
+    setReferralUserId(ref);
+    setMode("register");
+  }, []);
 
   if (!authLoading && user) return null;
 
@@ -63,10 +73,13 @@ export default function LoginPage() {
     setLoading(true);
 
     const result = isRegister
-      ? await register(name.trim(), email.trim(), password)
+      ? await register(name.trim(), email.trim(), password, referralUserId)
       : await login(email.trim(), password);
     if (result.success) {
       if (isRegister && result.pendingVerification) {
+        if (referralUserId) {
+          window.localStorage.removeItem("skylark_referral_user_id");
+        }
         setVerificationEmail(result.email || email.trim());
         setPassword("");
         setConfirmPassword("");
@@ -187,6 +200,11 @@ export default function LoginPage() {
 
           {isRegister && (
             <div>
+              {referralUserId && (
+                <div className="mb-3 rounded-lg bg-primary/10 px-3 py-2 text-xs text-primary">
+                  已绑定分享邀请，完成邮箱验证后会计入邀请人活动进度
+                </div>
+              )}
               <label className="block text-sm font-medium text-text-primary mb-1.5">
                 姓名
               </label>

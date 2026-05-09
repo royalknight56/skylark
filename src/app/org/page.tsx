@@ -26,6 +26,14 @@ import type { Organization } from "@/lib/types";
 
 type Tab = "select" | "create" | "join";
 
+interface OrgCreationQuota {
+  owned_count: number;
+  org_limit: number;
+  verified_referrals: number;
+  referrals_needed: number;
+  can_create: boolean;
+}
+
 export default function OrgSelectPage() {
   const router = useRouter();
   const { logout } = useAuth();
@@ -37,6 +45,8 @@ export default function OrgSelectPage() {
 
   const [orgName, setOrgName] = useState("");
   const [orgDesc, setOrgDesc] = useState("");
+  const [createError, setCreateError] = useState("");
+  const [quota, setQuota] = useState<OrgCreationQuota | null>(null);
 
   const [inviteCode, setInviteCode] = useState("");
   const [joinError, setJoinError] = useState("");
@@ -45,11 +55,12 @@ export default function OrgSelectPage() {
   /** 初始化：从 API 获取企业列表 */
   useEffect(() => {
     fetch("/api/orgs")
-      .then((res) => res.json() as Promise<{ success: boolean; data?: Organization[] }>)
+      .then((res) => res.json() as Promise<{ success: boolean; data?: Organization[]; quota?: OrgCreationQuota }>)
       .then((json) => {
         if (json.success && json.data) {
           setOrgs(json.data);
           setSelectedOrgId(json.data[0]?.id || "");
+          setQuota(json.quota || null);
         }
       })
       .catch(() => {})
@@ -79,20 +90,32 @@ export default function OrgSelectPage() {
   /** 创建新企业 */
   const handleCreateOrg = async () => {
     if (!orgName.trim()) return;
+    if (quota && !quota.can_create) {
+      setCreateError("个人最多可创建 1 个企业；邀请 5 人完成注册验证后可创建第 2 个企业");
+      return;
+    }
     setLoading(true);
+    setCreateError("");
     try {
       const res = await fetch("/api/orgs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: orgName.trim(), description: orgDesc.trim() }),
       });
-      const data = (await res.json()) as { success: boolean; data?: Organization };
+      const data = (await res.json()) as {
+        success: boolean;
+        data?: Organization;
+        error?: string;
+        quota?: OrgCreationQuota;
+      };
       if (data.success && data.data) {
         router.push("/messages");
         return;
       }
+      setCreateError(data.error || "创建失败，请稍后重试");
+      if (data.quota) setQuota(data.quota);
     } catch {
-      // 忽略
+      setCreateError("网络错误，请重试");
     }
     setLoading(false);
   };
@@ -289,6 +312,29 @@ export default function OrgSelectPage() {
                     focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-colors resize-none"
                   />
               </div>
+              <div className={`rounded-lg px-3 py-2 text-xs ${
+                quota?.can_create === false ? "bg-red-50 text-danger" : "bg-primary/10 text-primary"
+              }`}>
+                {quota ? (
+                  quota.can_create ? (
+                    <span>
+                      当前可创建 {quota.org_limit} 个企业，已创建 {quota.owned_count} 个；邀请进度 {quota.verified_referrals}/5。
+                    </span>
+                  ) : (
+                    <span>
+                      已达到当前创建上限。再邀请 {quota.referrals_needed} 人完成注册验证后，可创建第 2 个企业。
+                    </span>
+                  )
+                ) : (
+                  <span>个人默认可创建 1 个企业，邀请 5 人完成注册验证后可创建第 2 个企业。</span>
+                )}
+              </div>
+              {createError && (
+                <div className="flex items-center gap-2 text-sm text-danger">
+                  <AlertCircle size={14} />
+                  {createError}
+                </div>
+              )}
               <p className="text-xs text-text-placeholder text-center">
                 创建后可通过邀请码邀请成员加入
               </p>
@@ -296,7 +342,7 @@ export default function OrgSelectPage() {
             <div className="shrink-0 border-t border-panel-border p-4 bg-panel-bg">
               <button
                 onClick={handleCreateOrg}
-                disabled={!orgName.trim() || loading}
+                disabled={!orgName.trim() || loading || quota?.can_create === false}
                 className="w-full h-10 rounded-lg bg-primary text-white text-sm font-medium
                   hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed
                   flex items-center justify-center gap-2"

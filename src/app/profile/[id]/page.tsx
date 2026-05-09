@@ -29,6 +29,11 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!id) return;
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (ref) {
+      window.localStorage.setItem("skylark_referral_user_id", ref);
+    }
     fetch(`/api/users/profile?id=${id}`)
       .then((r) => r.json())
       .then((json: unknown) => {
@@ -153,10 +158,10 @@ export default function ProfilePage() {
           {/* 操作 */}
           <div className="mt-5">
             <button
-              onClick={() => router.push("/messages")}
+              onClick={() => router.push(`/login?ref=${encodeURIComponent(id)}`)}
               className="w-full py-2.5 rounded-xl bg-primary text-white text-sm font-medium flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
             >
-              <MessageSquare size={16} /> 发起聊天
+              <MessageSquare size={16} /> 注册 / 登录 Skylark
             </button>
           </div>
         </div>

@@ -15,12 +15,14 @@ import {
   updateUnverifiedPasswordUser,
 } from "@/lib/auth";
 import { sendEmailVerification } from "@/lib/email-verification";
+import { createReferralRegistration } from "@/lib/referrals";
 import { NextRequest, NextResponse } from "next/server";
 
 interface RegisterRequestBody {
   name?: string;
   email?: string;
   password?: string;
+  referral_user_id?: string;
 }
 
 /** POST /api/auth/register - 注册新用户 */
@@ -30,6 +32,7 @@ export async function POST(request: NextRequest) {
     const name = body.name?.trim() ?? "";
     const email = normalizeEmail(body.email ?? "");
     const password = body.password ?? "";
+    const referralUserId = body.referral_user_id?.trim() ?? "";
 
     if (!name || !email || !password) {
       return NextResponse.json({ success: false, error: "姓名、邮箱和密码不能为空" }, { status: 400 });
@@ -55,6 +58,7 @@ export async function POST(request: NextRequest) {
         name,
         passwordHash: await hashPassword(password),
       });
+      await createReferralRegistration(env.DB, referralUserId, user.id);
       await sendEmailVerification(env, user, request.nextUrl.origin);
       return NextResponse.json(
         { success: true, pending_verification: true, email: user.email },
@@ -69,6 +73,7 @@ export async function POST(request: NextRequest) {
       avatar_url: null,
     }, await hashPassword(password));
 
+    await createReferralRegistration(env.DB, referralUserId, user.id);
     await sendEmailVerification(env, user, request.nextUrl.origin);
     return NextResponse.json(
       { success: true, pending_verification: true, email: user.email },

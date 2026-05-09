@@ -26,7 +26,7 @@ interface AuthContextValue {
   /** 登录 */
   login: (email: string, password: string) => Promise<AuthResult>;
   /** 注册 */
-  register: (name: string, email: string, password: string) => Promise<AuthResult>;
+  register: (name: string, email: string, password: string, referralUserId?: string) => Promise<AuthResult>;
   /** 登出 */
   logout: () => Promise<void>;
   /** 刷新当前用户信息 */
@@ -131,9 +131,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(async (
     name: string,
     email: string,
-    password: string
+    password: string,
+    referralUserId?: string
   ): Promise<AuthResult> => {
-    return authenticate("/api/auth/register", { name, email, password });
+    return authenticate("/api/auth/register", {
+      name,
+      email,
+      password,
+      ...(referralUserId ? { referral_user_id: referralUserId } : {}),
+    });
   }, [authenticate]);
 
   /** 登出 */
