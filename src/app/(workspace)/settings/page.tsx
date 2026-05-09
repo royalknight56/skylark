@@ -5,29 +5,90 @@
 
 "use client";
 
-import { useState } from "react";
-import { Loader2, Save, LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Briefcase,
+  Loader2,
+  LogOut,
+  Mail,
+  Save,
+  Smile,
+  User as UserIcon,
+} from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
 import { useAuth } from "@/lib/auth-context";
 
+const STATUS_PRESETS = [
+  { emoji: "🔴", text: "请勿打扰", status: "busy" as const },
+  { emoji: "📅", text: "会议中", status: "busy" as const },
+  { emoji: "☕", text: "休息中", status: "away" as const },
+  { emoji: "🏠", text: "远程办公", status: "online" as const },
+  { emoji: "🏖️", text: "度假中", status: "away" as const },
+  { emoji: "🚗", text: "通勤中", status: "away" as const },
+];
+
+const statusDot: Record<string, string> = {
+  online: "bg-green-400",
+  busy: "bg-red-400",
+  away: "bg-yellow-400",
+  offline: "bg-gray-400",
+};
+
+const statusLabel: Record<string, string> = {
+  online: "在线",
+  busy: "忙碌",
+  away: "离开",
+  offline: "离线",
+};
+
 export default function SettingsPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const [name, setName] = useState(user?.name || "");
+  const [signature, setSignature] = useState(user?.signature || "");
+  const [statusEmoji, setStatusEmoji] = useState(user?.status_emoji || "");
+  const [statusText, setStatusText] = useState(user?.status_text || "");
+  const [statusValue, setStatusValue] = useState(user?.status || "online");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!user) return;
+    setName(user.name);
+    setSignature(user.signature || "");
+    setStatusEmoji(user.status_emoji || "");
+    setStatusText(user.status_text || "");
+    setStatusValue(user.status || "online");
+  }, [user]);
 
   /** 保存个人信息 */
   const handleSave = async () => {
     if (!name.trim()) return;
     setSaving(true);
+    setError("");
+    setSaved(false);
     try {
-      await fetch("/api/auth/me", {
+      const res = await fetch("/api/users/me", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({
+          name: name.trim(),
+          signature: signature.trim() || null,
+          status: statusValue,
+          status_text: statusText.trim() || null,
+          status_emoji: statusEmoji.trim() || null,
+        }),
       });
+      const json = (await res.json()) as { success: boolean; error?: string };
+      if (!json.success) {
+        setError(json.error || "保存失败，请稍后重试");
+        return;
+      }
+      await refreshUser();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setError("网络异常，请稍后重试");
     } finally {
       setSaving(false);
     }
@@ -37,55 +98,193 @@ export default function SettingsPage() {
 
   return (
     <div className="flex-1 bg-bg-page overflow-y-auto">
-      <div className="max-w-xl mx-auto py-10 px-6">
-        <h1 className="text-xl font-bold text-text-primary mb-8">个人设置</h1>
+      <div className="max-w-3xl mx-auto py-8 px-4 sm:px-6">
+        <div className="mb-6">
+          <h1 className="text-xl font-bold text-text-primary">个人设置</h1>
+          <p className="mt-1 text-sm text-text-placeholder">这些资料会同步展示在个人名片中</p>
+        </div>
 
-        {/* 头像区域 */}
-        <div className="flex items-center gap-4 mb-8">
-          <Avatar name={user.name} avatarUrl={user.avatar_url} size="lg" className="w-16! h-16! text-xl!" />
-          <div>
-            <p className="text-base font-semibold text-text-primary">{user.name}</p>
-            <p className="text-sm text-text-placeholder">{user.email}</p>
+        <div className="bg-panel-bg border border-panel-border rounded-xl overflow-hidden">
+          <div className="h-24 bg-linear-to-br from-primary via-blue-400 to-cyan-300" />
+          <div className="px-5 sm:px-6 pb-6 -mt-10">
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+              <div>
+                <div className="relative inline-block">
+                  <Avatar
+                    name={user.name}
+                    avatarUrl={user.avatar_url}
+                    size="lg"
+                    className="w-20! h-20! text-2xl! border-4 border-panel-bg shadow-md"
+                  />
+                  <span
+                    className={`absolute bottom-1 right-1 w-4 h-4 rounded-full border-[3px] border-panel-bg ${statusDot[user.status] || "bg-gray-400"}`}
+                  />
+                </div>
+                <div className="mt-2">
+                  <p className="text-xl font-bold text-text-primary">{user.name}</p>
+                  <p className="text-sm text-text-secondary">
+                    {user.status_emoji && <span className="mr-1">{user.status_emoji}</span>}
+                    {user.status_text || statusLabel[user.status] || "在线"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-text-secondary">
+                <Mail size={14} className="text-text-placeholder" />
+                <span className="break-all">{user.email}</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* 姓名 */}
-        <div className="space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">姓名</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm bg-panel-bg border border-panel-border rounded-lg
-                focus:outline-none focus:ring-2 focus:ring-primary/30 text-text-primary"
-            />
+        <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_18rem]">
+          <div className="bg-panel-bg border border-panel-border rounded-xl p-5 sm:p-6 space-y-5">
+            <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+              <UserIcon size={16} className="text-primary" />
+              基本资料
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-text-placeholder mb-1.5">名字</label>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm bg-bg-page border border-panel-border rounded-lg
+                  focus:outline-none focus:ring-2 focus:ring-primary/30 text-text-primary"
+                placeholder="输入你的名字"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-text-placeholder mb-1.5">个性签名</label>
+              <textarea
+                value={signature}
+                onChange={(e) => setSignature(e.target.value)}
+                rows={3}
+                maxLength={100}
+                className="w-full px-3 py-2.5 text-sm bg-bg-page border border-panel-border rounded-lg
+                  focus:outline-none focus:ring-2 focus:ring-primary/30 text-text-primary resize-none"
+                placeholder="输入你的个性签名..."
+              />
+              <p className="mt-1 text-right text-xs text-text-placeholder">{signature.length}/100</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-text-placeholder mb-1.5">邮箱</label>
+              <input
+                value={user.email}
+                readOnly
+                className="w-full px-3 py-2.5 text-sm bg-list-hover border border-panel-border rounded-lg
+                  text-text-secondary cursor-not-allowed"
+              />
+            </div>
           </div>
 
-          {/* 邮箱（只读） */}
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">邮箱</label>
-            <input
-              value={user.email}
-              readOnly
-              className="w-full px-3 py-2.5 text-sm bg-bg-page border border-panel-border rounded-lg
-                text-text-placeholder cursor-not-allowed"
-            />
-          </div>
+          <div className="bg-panel-bg border border-panel-border rounded-xl p-5 sm:p-6 space-y-5">
+            <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+              <Smile size={16} className="text-primary" />
+              个人状态
+            </div>
 
-          {/* 保存 */}
-          <button
-            onClick={handleSave}
-            disabled={saving || !name.trim()}
-            className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white text-sm font-medium rounded-lg
-              hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            {saved ? "已保存" : "保存"}
-          </button>
+            <div className="flex items-center gap-2">
+              <input
+                value={statusEmoji}
+                onChange={(e) => setStatusEmoji(e.target.value)}
+                className="w-12 text-center px-1 py-2.5 rounded-lg border border-panel-border bg-bg-page text-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                placeholder="😀"
+                maxLength={2}
+              />
+              <input
+                value={statusText}
+                onChange={(e) => setStatusText(e.target.value)}
+                className="min-w-0 flex-1 px-3 py-2.5 rounded-lg border border-panel-border bg-bg-page text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                placeholder="你在做什么？"
+                maxLength={50}
+              />
+            </div>
+
+            <div>
+              <p className="text-xs font-medium text-text-placeholder mb-1.5">在线状态</p>
+              <div className="grid grid-cols-3 gap-2">
+                {(["online", "busy", "away"] as const).map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => setStatusValue(status)}
+                    className={`flex items-center justify-center gap-1.5 py-2 rounded-lg border text-sm transition-colors
+                      ${statusValue === status
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-panel-border text-text-secondary hover:bg-list-hover"
+                      }`}
+                  >
+                    <span className={`w-2.5 h-2.5 rounded-full ${statusDot[status]}`} />
+                    {statusLabel[status]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-medium text-text-placeholder mb-1.5">快速选择</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {STATUS_PRESETS.map((preset) => (
+                  <button
+                    key={preset.text}
+                    type="button"
+                    onClick={() => {
+                      setStatusEmoji(preset.emoji);
+                      setStatusText(preset.text);
+                      setStatusValue(preset.status);
+                    }}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm text-left transition-colors
+                      ${statusEmoji === preset.emoji && statusText === preset.text
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-panel-border text-text-secondary hover:bg-list-hover"
+                      }`}
+                  >
+                    <span>{preset.emoji}</span>
+                    <span className="truncate">{preset.text}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* 退出登录 */}
-        <div className="mt-12 pt-6 border-t border-panel-border">
+        <div className="mt-5 bg-panel-bg border border-panel-border rounded-xl p-5 sm:p-6">
+          {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-danger">{error}</p>}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm text-text-secondary">
+              <Briefcase size={16} className="text-text-placeholder" />
+              保存后会同步更新侧边栏头像名片和公开名片页
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              {(statusEmoji || statusText || statusValue !== "online") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusEmoji("");
+                    setStatusText("");
+                    setStatusValue("online");
+                  }}
+                  className="px-4 py-2.5 rounded-lg border border-panel-border text-sm text-text-secondary hover:bg-list-hover transition-colors"
+                >
+                  清除状态
+                </button>
+              )}
+              <button
+                onClick={handleSave}
+                disabled={saving || !name.trim()}
+                className="flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-white text-sm font-medium rounded-lg
+                  hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                {saved ? "已保存" : "保存"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 bg-panel-bg border border-panel-border rounded-xl p-5 sm:p-6">
           <button
             onClick={logout}
             className="flex items-center gap-2 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 rounded-lg transition-colors"
